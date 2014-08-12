@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">BasicSensorsApi</string>
+    <string name="intro_text">Hi! Let\'s listen to some available data sources! Check the menu for more actions!</string>
+    <string name="action_unregister_listener">Unregister listener</string>
+    <string name="action_settings">Settings</string>
+
+</resources>
