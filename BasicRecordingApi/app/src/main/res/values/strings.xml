@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">BasicRecordingApi</string>
+    <string name="intro_text">Hi! Let\'s subscribe to some available data sources! Use the menu to explore additional actions!</string>
+    <string name="action_dump_subs">List Active Subscriptions</string>
+    <string name="action_cancel_subs">Cancel subscriptions</string>
+    <string name="action_settings">Settings</string>
+
+</resources>
