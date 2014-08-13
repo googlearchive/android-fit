@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">BasicHistorySessions</string>
+    <string name="intro_text">Behold, a data dump from the Fitness API! Check the menu for more actions!</string>
+    <string name="action_delete_session">Delete session</string>
+    <string name="action_settings">Settings</string>
+
+</resources>
