@@ -1,6 +1,7 @@
 package com.google.android.gms.fit.samples.basicsensorsapi;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -36,6 +37,8 @@ import java.util.concurrent.TimeUnit;
 public class MainActivity extends Activity {
     public static final String TAG = "BasicSensorsApi";
     private static final int REQUEST_OAUTH = 1;
+    private static final String AUTH_PENDING = "auth_state_pending";
+    private boolean authInProgress = false;
     private GoogleApiClient mClient = null;
 
     // Need to hold a reference to this listener, as it's passed into the "unregister"
@@ -50,17 +53,15 @@ public class MainActivity extends Activity {
         // This method sets up our custom logger, which will print all log messages to the device
         // screen, as well as to adb logcat.
         initializeLogging();
+
+        if (savedInstanceState != null) {
+            authInProgress = savedInstanceState.getBoolean(AUTH_PENDING);
+        }
+
+        buildFitnessClient();
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // Connect to the Fitness API
-        connectFitness();
-    }
-
-    private void connectFitness() {
-        Log.i(TAG, "Connecting...");
+    private void buildFitnessClient() {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
@@ -104,17 +105,28 @@ public class MainActivity extends Activity {
                                 // The failure has a resolution. Resolve it.
                                 // Called typically when the app is not yet authorized, and an
                                 // authorization dialog is displayed to the user.
-                                try {
-                                    Log.i(TAG, "Attempting to resolve failed connection");
-                                    result.startResolutionForResult(MainActivity.this,
-                                            REQUEST_OAUTH);
-                                } catch (IntentSender.SendIntentException e) {
-                                    Log.e(TAG, "Exception while starting resolution activity", e);
+                                if (!authInProgress) {
+                                    try {
+                                        Log.i(TAG, "Attempting to resolve failed connection");
+                                        authInProgress = true;
+                                        result.startResolutionForResult(MainActivity.this,
+                                                REQUEST_OAUTH);
+                                    } catch (IntentSender.SendIntentException e) {
+                                        Log.e(TAG,
+                                                "Exception while starting resolution activity", e);
+                                    }
                                 }
                             }
                         }
                 )
                 .build();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Connect to the Fitness API
+        Log.i(TAG, "Connecting...");
         mClient.connect();
     }
 
@@ -213,9 +225,29 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    protected void onPause() {
-        mClient.disconnect();
-        super.onPause();
+    protected void onStop() {
+        super.onStop();
+        if (mClient.isConnected()) {
+            mClient.disconnect();
+        }
+    }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_OAUTH) {
+            authInProgress = false;
+            if (resultCode == RESULT_OK) {
+                // Make sure the app is not already connected or attempting to connect
+                if (!mClient.isConnecting() && !mClient.isConnected()) {
+                    mClient.connect();
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(AUTH_PENDING, authInProgress);
     }
 
     @Override
