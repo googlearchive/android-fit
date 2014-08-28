@@ -12,7 +12,6 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
-import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.common.api.Status;
 import com.google.android.gms.fit.samples.common.logger.Log;
@@ -37,8 +36,13 @@ import java.util.concurrent.TimeUnit;
 public class MainActivity extends Activity {
     public static final String TAG = "BasicSensorsApi";
     private static final int REQUEST_OAUTH = 1;
+
+    // Tracks whether an authorization activity is stacking over the current activity, i.e. when
+    // a known auth error is being resolved, such as showing the account chooser or presenting a
+    // consent dialog. This avoids common duplications as might happen on screen rotations, etc.
     private static final String AUTH_PENDING = "auth_state_pending";
     private boolean authInProgress = false;
+
     private GoogleApiClient mClient = null;
 
     // Need to hold a reference to this listener, as it's passed into the "unregister"
@@ -130,100 +134,6 @@ public class MainActivity extends Activity {
         mClient.connect();
     }
 
-    /**
-     * Finds available data sources.  If the application cares about a data type but doesn't care
-     * about the source of the data, this can be skipped entirely, instead calling
-     * register(client, request), where the request contains the desired data type.
-     */
-    private void findFitnessDataSources() {
-        PendingResult<DataSourcesResult> dataSources =
-                Fitness.SensorsApi.findDataSources(mClient, new DataSourcesRequest.Builder()
-                        // At least one datatype must be specified.
-                        .setDataTypes(
-                                DataTypes.ACTIVITY_SAMPLE,
-                                DataTypes.LOCATION)
-                        // Can specify whether data type is raw or derived.
-                        //.setDataSourceTypes(DataSource.TYPE_DERIVED)
-                        .build());
-
-        dataSources.setResultCallback(new ResultCallback<DataSourcesResult>() {
-            @Override
-            public void onResult(DataSourcesResult dataSourcesResult) {
-                Log.i(TAG, "Result: " + dataSourcesResult.getStatus().toString());
-                for (DataSource dataSource : dataSourcesResult.getDataSources()) {
-                    Log.i(TAG, "Data source found: " + dataSource.toString());
-                    Log.i(TAG, "Data Source type: " + dataSource.getDataType().getName());
-
-                    //Let's register a listener to receive Activity data!
-                    if (dataSource.getDataType().equals(DataTypes.ACTIVITY_SAMPLE)
-                            && mListener == null) {
-                        Log.i(TAG, "Data source for ACTIVITY_SAMPLE found!  Registering.");
-                        registerFitnessDataListener(dataSource, DataTypes.ACTIVITY_SAMPLE);
-                    }
-                }
-            }
-        });
-    }
-
-    private void registerFitnessDataListener(DataSource dataSource, DataType dataType) {
-        mListener = new DataSourceListener() {
-            @Override
-            public void onEvent(DataPoint dataPoint) {
-                for (DataType.Field field : dataPoint.getDataType().getFields()) {
-                    Value val = dataPoint.getValue(field);
-                    Log.i(TAG, "Detected DataPoint field: " + field.getName());
-                    Log.i(TAG, "Detected DataPoint value: " + val);
-                }
-            }
-        };
-
-        PendingResult<Status> regResult = Fitness.SensorsApi.register(
-                mClient,
-                new SensorRequest.Builder()
-                        .setDataSource(dataSource) // Can be omitted.
-                        .setDataType(dataType) // Can't be omitted.
-                        .setSamplingRate(10, TimeUnit.SECONDS)
-                        .build(),
-                mListener);
-
-        regResult.setResultCallback(new ResultCallback<Status>() {
-            @Override
-            public void onResult(Status status) {
-                if (status.isSuccess()) {
-                    Log.i(TAG, "Listener registered!");
-                } else {
-                    Log.i(TAG, "Listener not registered.");
-                }
-            }
-        });
-    }
-
-    private void unregisterFitnessDataListener() {
-        if(mListener == null) {
-            // This code only activates one listener at a time.  If there's no listener, there's
-            // nothing to unregister.
-            return;
-        }
-
-        PendingResult<Status> pendingResult = Fitness.SensorsApi.unregister(
-                mClient,
-                mListener);
-
-        // Waiting isn't actually necessary as the unregister call will complete regardless,
-        // even if called from within onStop, but it can still be added in order to inspect the
-        // results.
-        pendingResult.setResultCallback(new ResultCallback<Status>() {
-            @Override
-            public void onResult(Status status) {
-                if (status.isSuccess()) {
-                    Log.i(TAG, "Listener was removed!");
-                } else {
-                    Log.i(TAG, "Listener was not removed.");
-                }
-            }
-        });
-    }
-
     @Override
     protected void onStop() {
         super.onStop();
@@ -231,6 +141,7 @@ public class MainActivity extends Activity {
             mClient.disconnect();
         }
     }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_OAUTH) {
@@ -248,6 +159,96 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putBoolean(AUTH_PENDING, authInProgress);
+    }
+
+    /**
+     * Finds available data sources.  If the application cares about a data type but doesn't care
+     * about the source of the data, this can be skipped entirely, instead calling
+     * register(client, request), where the request contains the desired data type.
+     */
+    private void findFitnessDataSources() {
+        Fitness.SensorsApi.findDataSources(mClient, new DataSourcesRequest.Builder()
+                // At least one datatype must be specified.
+                .setDataTypes(
+                        DataTypes.ACTIVITY_SAMPLE,
+                        DataTypes.LOCATION)
+                // Can specify whether data type is raw or derived.
+                //.setDataSourceTypes(DataSource.TYPE_DERIVED)
+                .build())
+                .setResultCallback(new ResultCallback<DataSourcesResult>() {
+                    @Override
+                    public void onResult(DataSourcesResult dataSourcesResult) {
+                        Log.i(TAG, "Result: " + dataSourcesResult.getStatus().toString());
+                        for (DataSource dataSource : dataSourcesResult.getDataSources()) {
+                            Log.i(TAG, "Data source found: " + dataSource.toString());
+                            Log.i(TAG, "Data Source type: " + dataSource.getDataType().getName());
+
+                            //Let's register a listener to receive Activity data!
+                            if (dataSource.getDataType().equals(DataTypes.ACTIVITY_SAMPLE)
+                                    && mListener == null) {
+                                Log.i(TAG, "Data source for ACTIVITY_SAMPLE found!  Registering.");
+                                registerFitnessDataListener(dataSource, DataTypes.ACTIVITY_SAMPLE);
+                            }
+                        }
+                    }
+        });
+    }
+
+    private void registerFitnessDataListener(DataSource dataSource, DataType dataType) {
+        mListener = new DataSourceListener() {
+            @Override
+            public void onEvent(DataPoint dataPoint) {
+                for (DataType.Field field : dataPoint.getDataType().getFields()) {
+                    Value val = dataPoint.getValue(field);
+                    Log.i(TAG, "Detected DataPoint field: " + field.getName());
+                    Log.i(TAG, "Detected DataPoint value: " + val);
+                }
+            }
+        };
+
+        Fitness.SensorsApi.register(
+                mClient,
+                new SensorRequest.Builder()
+                        .setDataSource(dataSource) // Optional but recommended for custom data sets.
+                        .setDataType(dataType) // Can't be omitted.
+                        .setSamplingRate(10, TimeUnit.SECONDS)
+                        .build(),
+                mListener)
+                .setResultCallback(new ResultCallback<Status>() {
+                    @Override
+                    public void onResult(Status status) {
+                        if (status.isSuccess()) {
+                            Log.i(TAG, "Listener registered!");
+                        } else {
+                            Log.i(TAG, "Listener not registered.");
+                        }
+                    }
+        });
+    }
+
+    private void unregisterFitnessDataListener() {
+        if(mListener == null) {
+            // This code only activates one listener at a time.  If there's no listener, there's
+            // nothing to unregister.
+            return;
+        }
+
+        // Waiting isn't actually necessary as the unregister call will complete regardless,
+        // even if called from within onStop, but a callback can still be added in order to
+        // inspect the results.
+        Fitness.SensorsApi.unregister(
+                mClient,
+                mListener)
+                .setResultCallback(new ResultCallback<Status>() {
+                    @Override
+                    public void onResult(Status status) {
+                        if (status.isSuccess()) {
+                            Log.i(TAG, "Listener was removed!");
+                        } else {
+                            Log.i(TAG, "Listener was not removed.");
+                        }
+                    }
+        });
     }
 
     @Override
