@@ -1,6 +1,7 @@
 package com.google.android.gms.fit.samples.basichistoryapi;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.os.AsyncTask;
@@ -12,7 +13,6 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
-import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.common.api.Status;
 import com.google.android.gms.fit.samples.common.logger.Log;
@@ -31,8 +31,6 @@ import com.google.android.gms.fitness.DataType;
 import com.google.android.gms.fitness.DataTypes;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessScopes;
-import com.google.android.gms.fitness.SessionReadRequest;
-import com.google.android.gms.fitness.SessionReadResult;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -43,6 +41,13 @@ import java.util.concurrent.TimeUnit;
 public class MainActivity extends Activity {
     public static final String TAG = "BasicHistoryApi";
     private static final int REQUEST_OAUTH = 1;
+
+    // Tracks whether an authorization activity is stacking over the current activity, i.e. when
+    // a known auth error is being resolved, such as showing the account chooser or presenting a
+    // consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+    private static final String AUTH_PENDING = "auth_state_pending";
+    private boolean authInProgress = false;
+
     private GoogleApiClient mClient = null;
 
     @Override
@@ -52,17 +57,15 @@ public class MainActivity extends Activity {
         // This method sets up our custom logger, which will print all log messages to the device
         // screen, as well as to adb logcat.
         initializeLogging();
+
+        if (savedInstanceState != null) {
+            authInProgress = savedInstanceState.getBoolean(AUTH_PENDING);
+        }
+
+        buildFitnessClient();
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // Connect to the Fitness API
-        connectFitness();
-    }
-
-    private void connectFitness() {
-        Log.i(TAG, "Connecting...");
+    private void buildFitnessClient() {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
@@ -104,18 +107,56 @@ public class MainActivity extends Activity {
                                 // The failure has a resolution. Resolve it.
                                 // Called typically when the app is not yet authorized, and an
                                 // authorization dialog is displayed to the user.
-                                try {
-                                    Log.i(TAG, "Attempting to resolve failed connection");
-                                    result.startResolutionForResult(MainActivity.this,
-                                            REQUEST_OAUTH);
-                                } catch (IntentSender.SendIntentException e) {
-                                    Log.e(TAG, "Exception while starting resolution activity", e);
+                                if (!authInProgress) {
+                                    try {
+                                        Log.i(TAG, "Attempting to resolve failed connection");
+                                        authInProgress = true;
+                                        result.startResolutionForResult(MainActivity.this,
+                                                REQUEST_OAUTH);
+                                    } catch (IntentSender.SendIntentException e) {
+                                        Log.e(TAG,
+                                                "Exception while starting resolution activity", e);
+                                    }
                                 }
                             }
                         }
                 )
                 .build();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Connect to the Fitness API
+        Log.i(TAG, "Connecting...");
         mClient.connect();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mClient.isConnected()) {
+            mClient.disconnect();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_OAUTH) {
+            authInProgress = false;
+            if (resultCode == RESULT_OK) {
+                // Make sure the app is not already connected or attempting to connect
+                if (!mClient.isConnecting() && !mClient.isConnected()) {
+                    mClient.connect();
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(AUTH_PENDING, authInProgress);
     }
 
     // By using an AsyncTask to make our calls, we can schedule synchronous calls, so that we can
@@ -128,11 +169,10 @@ public class MainActivity extends Activity {
             //First, create a new dataset and insertion request.
             DataInsertRequest insertRequest = insertFitnessData();
             // Then, invoke the History API to insert the data.
-            Log.i(TAG, "Inserting the dataset in the History API");
-            PendingResult<com.google.android.gms.common.api.Status> pendingInsertResult =
-                    Fitness.HistoryApi.insert(mClient, insertRequest);
             // After insertion, await the result, which is possible here because of the AsyncTask.
-            com.google.android.gms.common.api.Status insertStatus = pendingInsertResult.await();
+            Log.i(TAG, "Inserting the dataset in the History API");
+            com.google.android.gms.common.api.Status insertStatus =
+                    Fitness.HistoryApi.insert(mClient, insertRequest).await();
             // Before querying the data, check to see if the insertion succeeded.
             if (!insertStatus.isSuccess()) {
                 Log.i(TAG, "There was a problem inserting the dataset.");
@@ -144,31 +184,10 @@ public class MainActivity extends Activity {
             // Begin by creating the query.
             DataReadRequest readRequest = queryFitnessData();
             // Invoke the History API to fetch the data with the query.
-            PendingResult<DataReadResult> pendingReadResult =
-                    Fitness.HistoryApi.readData(mClient, readRequest);
             // Await the result of the read request.
-            DataReadResult dataReadResult = pendingReadResult.await();
-            // It's possible to get more constrained data sets by specifying a data source or
-            // data type, but for demonstrative purposes here's how one would dump all the data.
-
-            // If the ReadDataRequest specified aggregated data, it will be returned as buckets
-            // containing DataSets, instead of just DataSets.
-            if (dataReadResult.getBuckets().size() > 0) {
-                Log.i(TAG, "Number of returned buckets of DataSets is: "
-                        + dataReadResult.getBuckets().size());
-                for (Bucket bucket : dataReadResult.getBuckets()) {
-                    List<DataSet> dataSets = bucket.getDataSets();
-                    for (DataSet dataSet : dataSets) {
-                        dumpDataSet(dataSet);
-                    }
-                }
-            } else if (dataReadResult.getDataSets().size() > 0) {
-                Log.i(TAG, "Number of returned DataSets is: "
-                        + dataReadResult.getDataSets().size());
-                for (DataSet dataSet : dataReadResult.getDataSets()) {
-                    dumpDataSet(dataSet);
-                }
-            }
+            DataReadResult dataReadResult =
+                    Fitness.HistoryApi.readData(mClient, readRequest).await();
+            printData(dataReadResult);
             return null;
         }
     }
@@ -217,8 +236,8 @@ public class MainActivity extends Activity {
         long endTime = now.getTime();
         long startTime = endTime - (WEEK_IN_MS);
 
-        Log.i(TAG, "Range Start: " + sdf.format(startTime).toString());
-        Log.i(TAG, "Range End: " + sdf.format(endTime).toString());
+        Log.i(TAG, "Range Start: " + sdf.format(startTime));
+        Log.i(TAG, "Range End: " + sdf.format(endTime));
 
         return new DataReadRequest.Builder()
                 // The data request can specify multiple data types to return, effectively
@@ -233,6 +252,30 @@ public class MainActivity extends Activity {
                 .bucketByTime(1, TimeUnit.DAYS)
                 .setTimeRange(startTime, endTime)
                 .build();
+    }
+
+    private void printData(DataReadResult dataReadResult) {
+        // It's possible to get more constrained data sets by specifying a data source or
+        // data type, but for demonstrative purposes here's how one would dump all the data.
+
+        // If the ReadDataRequest specified aggregated data, it will be returned as buckets
+        // containing DataSets, instead of just DataSets.
+        if (dataReadResult.getBuckets().size() > 0) {
+            Log.i(TAG, "Number of returned buckets of DataSets is: "
+                    + dataReadResult.getBuckets().size());
+            for (Bucket bucket : dataReadResult.getBuckets()) {
+                List<DataSet> dataSets = bucket.getDataSets();
+                for (DataSet dataSet : dataSets) {
+                    dumpDataSet(dataSet);
+                }
+            }
+        } else if (dataReadResult.getDataSets().size() > 0) {
+            Log.i(TAG, "Number of returned DataSets is: "
+                    + dataReadResult.getDataSets().size());
+            for (DataSet dataSet : dataReadResult.getDataSets()) {
+                dumpDataSet(dataSet);
+            }
+        }
     }
 
     public void dumpDataSet(DataSet dataSet) {
@@ -273,19 +316,17 @@ public class MainActivity extends Activity {
         // 2. Invoke the History API with:
         // - The Google API client object
         // - The delete request
-        PendingResult<Status> pendingResult =
-                Fitness.HistoryApi.delete(mClient, request);
-
-        // 3. Check the result
-        pendingResult.setResultCallback(new ResultCallback<Status>() {
-            @Override
-            public void onResult(Status status) {
-                if (status.isSuccess()) {
-                    Log.i(TAG, "Successfully deleted today's step count data");
-                } else {
-                    Log.i(TAG, "Failed to delete today's step count data");
-                }
-            }
+        // And then check the result
+        Fitness.HistoryApi.delete(mClient, request)
+                .setResultCallback(new ResultCallback<Status>() {
+                    @Override
+                    public void onResult(Status status) {
+                        if (status.isSuccess()) {
+                            Log.i(TAG, "Successfully deleted today's step count data");
+                        } else {
+                            Log.i(TAG, "Failed to delete today's step count data");
+                        }
+                    }
         });
     }
 
