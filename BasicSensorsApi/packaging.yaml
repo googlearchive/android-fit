@@ -1,0 +1,15 @@
+# GOOGLE SAMPLE PACKAGING DATA
+#
+# This file is used by Google as part of our samples packaging process.
+# End users may safely ignore this file. It has no relevance to other systems.
+---
+
+status:       PUBLISHED
+technologies: [Android, Fit]
+categories:   [Getting Started]
+languages:    [Java]
+solutions:    [Mobile]
+github:       googlesamples/android-fitness
+level:        BEGINNER
+icon: BasicSensorsApi/big_icon.png
+license: apache2
