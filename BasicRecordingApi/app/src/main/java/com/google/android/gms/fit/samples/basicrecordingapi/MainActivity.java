@@ -1,6 +1,7 @@
 package com.google.android.gms.fit.samples.basicrecordingapi;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -29,6 +30,13 @@ import com.google.android.gms.fitness.Subscription;
 public class MainActivity extends Activity {
     public static final String TAG = "BasicRecordingApi";
     private static final int REQUEST_OAUTH = 1;
+
+    // Tracks whether an authorization activity is stacking over the current activity, i.e. when
+    // a known auth error is being resolved, such as showing the account chooser or presenting a
+    // consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+    private static final String AUTH_PENDING = "auth_state_pending";
+    private boolean authInProgress = false;
+
     private GoogleApiClient mClient = null;
 
     @Override
@@ -38,17 +46,15 @@ public class MainActivity extends Activity {
         // This method sets up our custom logger, which will print all log messages to the device
         // screen, as well as to adb logcat.
         initializeLogging();
+
+        if (savedInstanceState != null) {
+            authInProgress = savedInstanceState.getBoolean(AUTH_PENDING);
+        }
+
+        buildFitnessClient();
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // Connect to the Fitness API
-        connectFitness();
-    }
-
-    private void connectFitness() {
-        Log.i(TAG, "Connecting...");
+    private void buildFitnessClient() {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
@@ -91,18 +97,56 @@ public class MainActivity extends Activity {
                                 // The failure has a resolution. Resolve it.
                                 // Called typically when the app is not yet authorized, and an
                                 // authorization dialog is displayed to the user.
-                                try {
-                                    Log.i(TAG, "Attempting to resolve failed connection");
-                                    result.startResolutionForResult(MainActivity.this,
-                                            REQUEST_OAUTH);
-                                } catch (IntentSender.SendIntentException e) {
-                                    Log.e(TAG, "Exception while starting resolution activity", e);
+                                if (!authInProgress) {
+                                    try {
+                                        Log.i(TAG, "Attempting to resolve failed connection");
+                                        authInProgress = true;
+                                        result.startResolutionForResult(MainActivity.this,
+                                                REQUEST_OAUTH);
+                                    } catch (IntentSender.SendIntentException e) {
+                                        Log.e(TAG,
+                                                "Exception while starting resolution activity", e);
+                                    }
                                 }
                             }
                         }
                 )
                 .build();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Connect to the Fitness API
+        Log.i(TAG, "Connecting...");
         mClient.connect();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mClient.isConnected()) {
+            mClient.disconnect();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_OAUTH) {
+            authInProgress = false;
+            if (resultCode == RESULT_OK) {
+                // Make sure the app is not already connected or attempting to connect
+                if (!mClient.isConnecting() && !mClient.isConnected()) {
+                    mClient.connect();
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(AUTH_PENDING, authInProgress);
     }
 
     // Subscriptions can exist across application instances (so data is recorded even after the
@@ -115,11 +159,9 @@ public class MainActivity extends Activity {
         new Thread() {
             public void run() {
                 // Get a list of current subscriptions and iterate over it.
-                PendingResult<ListSubscriptionsResult> pendingSubResults = getSubscriptionsList();
-
                 // Since this code isn't running on the UI thread, it's safe to await() for the
                 // result instead of creating callbacks.
-                ListSubscriptionsResult subResults = pendingSubResults.await();
+                ListSubscriptionsResult subResults = getSubscriptionsList().await();
                 boolean activitySubActive = false;
                 for (Subscription sc : subResults.getSubscriptions()) {
                     if (sc.getDataType().equals(DataTypes.ACTIVITY_SAMPLE)) {
@@ -137,10 +179,8 @@ public class MainActivity extends Activity {
 
                 // Invoke the Recording API.  As soon as the subscription is active,
                 // fitness data will start recording.
-                PendingResult<Status> pendingResult =
-                        Fitness.RecordingApi.subscribe(mClient, DataTypes.ACTIVITY_SAMPLE);
-
-                Status status = pendingResult.await();
+                Status status =
+                        Fitness.RecordingApi.subscribe(mClient, DataTypes.ACTIVITY_SAMPLE).await();
                 if (status.isSuccess()) {
                     Log.i(TAG, "Successfully subscribed!");
                 } else {
@@ -155,17 +195,12 @@ public class MainActivity extends Activity {
     // wants the list, and leave it to the calling method to decide what to do with the result.
     private PendingResult<ListSubscriptionsResult> getSubscriptionsList() {
         // Invoke a Subscriptions list request with the Recording API
-        PendingResult<ListSubscriptionsResult> pendingResult =
-                Fitness.RecordingApi.listSubscriptions(mClient, DataTypes.ACTIVITY_SAMPLE);
-
-        return pendingResult;
+        return Fitness.RecordingApi.listSubscriptions(mClient, DataTypes.ACTIVITY_SAMPLE);
     }
 
     public void dumpSubscriptionsList() {
-        PendingResult<ListSubscriptionsResult> pendingResult = getSubscriptionsList();
-
         // Create the callback to retrieve the list of subscriptions asynchronously.
-        pendingResult.setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
+        getSubscriptionsList().setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
             @Override
             public void onResult(ListSubscriptionsResult listSubscriptionsResult) {
                 for (Subscription sc : listSubscriptionsResult.getSubscriptions()) {
@@ -178,9 +213,7 @@ public class MainActivity extends Activity {
 
     // Cancel all fitness API subscriptions.
     public void cancelAllSubscriptions() {
-        PendingResult<ListSubscriptionsResult> pendingresult = getSubscriptionsList();
-
-        pendingresult.setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
+        getSubscriptionsList().setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
             @Override
             public void onResult(ListSubscriptionsResult listSubscriptionsResult) {
                 for (Subscription sc : listSubscriptionsResult.getSubscriptions()) {
@@ -194,23 +227,20 @@ public class MainActivity extends Activity {
         final String dataTypeStr = sc.getDataType().toString();
         Log.i(TAG, "Unsubscribing from data type: " + dataTypeStr);
 
-        // Invoke the Recording API to unsubscribe from the data type
-        PendingResult<Status> pendingResult =
-                Fitness.RecordingApi.unsubscribe(mClient, DataTypes.STEP_COUNT_CUMULATIVE);
-
-        // Retrieve the result of the request synchronously
-
-        pendingResult.setResultCallback(new ResultCallback<Status>() {
-            @Override
-            public void onResult(Status status) {
-                if (status.isSuccess()) {
-                    Log.i(TAG, "Successfully unsubscribed for data type: " + dataTypeStr);
-                } else {
-                    // Subscription not removed
-                    Log.i(TAG, "Failed to unsubscribe for data type: " + dataTypeStr);
-                }
-            }
-        });
+        // Invoke the Recording API to unsubscribe from the data type and
+        // retrieve the result of the request synchronously
+        Fitness.RecordingApi.unsubscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
+                .setResultCallback(new ResultCallback<Status>() {
+                    @Override
+                    public void onResult(Status status) {
+                        if (status.isSuccess()) {
+                            Log.i(TAG, "Successfully unsubscribed for data type: " + dataTypeStr);
+                        } else {
+                            // Subscription not removed
+                            Log.i(TAG, "Failed to unsubscribe for data type: " + dataTypeStr);
+                        }
+                    }
+                });
     }
 
     @Override
