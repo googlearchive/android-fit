@@ -1,6 +1,7 @@
 package com.google.android.gms.fit.samples.basichistorysessions;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.os.AsyncTask;
@@ -12,7 +13,6 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
-import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.common.api.Status;
 import com.google.android.gms.fit.samples.common.logger.Log;
@@ -42,6 +42,13 @@ public class MainActivity extends Activity {
     public static final String TAG = "BasicSessions";
     public static final String SAMPLE_SESSION_NAME = "Afternoon run";
     private static final int REQUEST_OAUTH = 1;
+
+    // Tracks whether an authorization activity is stacking over the current activity, i.e. when
+    // a known auth error is being resolved, such as showing the account chooser or presenting a
+    // consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+    private static final String AUTH_PENDING = "auth_state_pending";
+    private boolean authInProgress = false;
+
     private GoogleApiClient mClient = null;
 
     @Override
@@ -51,17 +58,15 @@ public class MainActivity extends Activity {
         // This method sets up our custom logger, which will print all log messages to the device
         // screen, as well as to adb logcat.
         initializeLogging();
+
+        if (savedInstanceState != null) {
+            authInProgress = savedInstanceState.getBoolean(AUTH_PENDING);
+        }
+
+        buildFitnessClient();
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // Connect to the Fitness API
-        connectFitness();
-    }
-
-    private void connectFitness() {
-        Log.i(TAG, "Connecting...");
+    private void buildFitnessClient() {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
@@ -103,18 +108,55 @@ public class MainActivity extends Activity {
                                 // The failure has a resolution. Resolve it.
                                 // Called typically when the app is not yet authorized, and an
                                 // authorization dialog is displayed to the user.
-                                try {
-                                    Log.i(TAG, "Attempting to resolve failed connection");
-                                    result.startResolutionForResult(MainActivity.this,
-                                            REQUEST_OAUTH);
-                                } catch (IntentSender.SendIntentException e) {
-                                    Log.e(TAG, "Exception while starting resolution activity", e);
+                                if (!authInProgress) {
+                                    try {
+                                        Log.i(TAG, "Attempting to resolve failed connection");
+                                        authInProgress = true;
+                                        result.startResolutionForResult(MainActivity.this,
+                                                REQUEST_OAUTH);
+                                    } catch (IntentSender.SendIntentException e) {
+                                        Log.e(TAG,
+                                                "Exception while starting resolution activity", e);
+                                    }
                                 }
                             }
                         }
                 )
                 .build();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Connect to the Fitness API
+        Log.i(TAG, "Connecting...");
         mClient.connect();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mClient.isConnected()) {
+            mClient.disconnect();
+        }
+    }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_OAUTH) {
+            authInProgress = false;
+            if (resultCode == RESULT_OK) {
+                // Make sure the app is not already connected or attempting to connect
+                if (!mClient.isConnecting() && !mClient.isConnected()) {
+                    mClient.connect();
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(AUTH_PENDING, authInProgress);
     }
 
     // By using an AsyncTask to make our calls, we can schedule synchronous calls, so that we can
@@ -127,10 +169,9 @@ public class MainActivity extends Activity {
             //First, create a new session and an insertion request.
             SessionInsertRequest insertRequest = insertFitnessSession();
             // Then, invoke the History API to insert the session.
-            PendingResult<com.google.android.gms.common.api.Status> pendingInsertResult =
-                    Fitness.HistoryApi.insertSession(mClient, insertRequest);
             // After insertion, await the result, which is possible here because of the AsyncTask.
-            com.google.android.gms.common.api.Status insertStatus = pendingInsertResult.await();
+            com.google.android.gms.common.api.Status insertStatus =
+                    Fitness.HistoryApi.insertSession(mClient, insertRequest).await();
             // Before querying the session, check to see if the insertion succeeded.
             if (!insertStatus.isSuccess()) {
                 Log.i(TAG, "There was a problem inserting the session.");
@@ -142,10 +183,9 @@ public class MainActivity extends Activity {
             // Begin by creating the query.
             SessionReadRequest readRequest = readFitnessSession();
             // Invoke the History API to fetch the session with the query.
-            PendingResult<SessionReadResult> pendingReadResult =
-                    Fitness.HistoryApi.readSession(mClient, readRequest);
-            // Await the result of the read request.
-            SessionReadResult sessionReadResult = pendingReadResult.await();
+            // And wait for the result of the read request.
+            SessionReadResult sessionReadResult =
+                    Fitness.HistoryApi.readSession(mClient, readRequest).await();
             // Get a list of the sessions that match the criteria to check the result.
             Log.i(TAG, "Session read was successful. Number of returned sessions is: "
                     + sessionReadResult.getSessions().size());
@@ -271,19 +311,17 @@ public class MainActivity extends Activity {
         // 2. Invoke the History API with:
         // - The Google API client object
         // - The delete request
-        PendingResult<Status> pendingResult =
-            Fitness.HistoryApi.delete(mClient, request);
-
-        // 3. Check the result
-        pendingResult.setResultCallback(new ResultCallback<Status>() {
-            @Override
-            public void onResult(Status status) {
-                if (status.isSuccess()) {
-                    Log.i(TAG, "Successfully deleted today's sessions");
-                } else {
-                    Log.i(TAG, "Failed to delete today's sessions");
-                }
-            }
+        // And then check the result in the callback.
+        Fitness.HistoryApi.delete(mClient, request)
+                .setResultCallback(new ResultCallback<Status>() {
+                    @Override
+                    public void onResult(Status status) {
+                        if (status.isSuccess()) {
+                            Log.i(TAG, "Successfully deleted today's sessions");
+                        } else {
+                            Log.i(TAG, "Failed to delete today's sessions");
+                        }
+                    }
         });
     }
 
