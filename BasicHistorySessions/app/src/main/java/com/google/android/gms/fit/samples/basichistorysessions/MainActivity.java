@@ -41,6 +41,7 @@ import com.google.android.gms.fitness.DataSource;
 import com.google.android.gms.fitness.DataType;
 import com.google.android.gms.fitness.DataTypes;
 import com.google.android.gms.fitness.Fitness;
+import com.google.android.gms.fitness.FitnessActivities;
 import com.google.android.gms.fitness.FitnessScopes;
 import com.google.android.gms.fitness.Session;
 import com.google.android.gms.fitness.SessionInsertRequest;
@@ -58,9 +59,17 @@ public class MainActivity extends Activity {
     public static final String SAMPLE_SESSION_NAME = "Afternoon run";
     private static final int REQUEST_OAUTH = 1;
 
-    // Tracks whether an authorization activity is stacking over the current activity, i.e. when
-    // a known auth error is being resolved, such as showing the account chooser or presenting a
-    // consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+    private static final long HALF_HOUR_IN_MS = 1000 * 60 * 30;
+    private static final long TWENTY_MIN_IN_MS = 1000 * 60 * 20;
+    private static final long TEN_MIN_IN_MS = 1000 * 60 * 10;
+    private static final long DAY_IN_MS = 1000 * 60 * 60 * 24;
+    private static final long WEEK_IN_MS = 1000 * 60 * 60 * 24 * 7;
+
+    /**
+     * Tracks whether an authorization activity is stacking over the current activity, i.e. when
+     *  a known auth error is being resolved, such as showing the account chooser or presenting a
+     *  consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+     */
     private static final String AUTH_PENDING = "auth_state_pending";
     private boolean authInProgress = false;
 
@@ -70,6 +79,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
         // This method sets up our custom logger, which will print all log messages to the device
         // screen, as well as to adb logcat.
         initializeLogging();
@@ -174,11 +184,13 @@ public class MainActivity extends Activity {
         outState.putBoolean(AUTH_PENDING, authInProgress);
     }
 
-    // By using an AsyncTask to make our calls, we can schedule synchronous calls, so that we can
-    // query for sessions after confirming that our insert was successful. Using asynchronous calls
-    // and callbacks would not guarantee that the insertion had concluded before the read request
-    // was made. An example of an asynchronous call using a callback can be found in the example
-    // on deleting sessions below.
+    /**
+     *  By using an AsyncTask to make our calls, we can schedule synchronous calls, so that we can
+     *  query for sessions after confirming that our insert was successful. Using asynchronous calls
+     *  and callbacks would not guarantee that the insertion had concluded before the read request
+     *  was made. An example of an asynchronous call using a callback can be found in the example
+     *  on deleting sessions below.
+     */
     private class InsertAndVerifySessionTask extends AsyncTask<Void, Void, Void> {
         protected Void doInBackground(Void... params) {
             //First, create a new session and an insertion request.
@@ -189,7 +201,8 @@ public class MainActivity extends Activity {
                     Fitness.HistoryApi.insertSession(mClient, insertRequest).await();
             // Before querying the session, check to see if the insertion succeeded.
             if (!insertStatus.isSuccess()) {
-                Log.i(TAG, "There was a problem inserting the session.");
+                Log.i(TAG, "There was a problem inserting the session: " +
+                        insertStatus.getStatusMessage());
                 return null;
             }
             // At this point, the session has been inserted and can be read.
@@ -218,31 +231,96 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     *  Creates an session insertion request for a run that consists of 10 minutes running,
+     *  10 minutes walking, and 10 minutes or running. The request contains three datasets:
+     *  running data, walking data, and ActivitySegments data.
+     *
+     *  Sessions are time intervals that are associated with all Fit data that falls into that time
+     *  interval. Some or all of this data can be inserted when inserting a session, or inserted
+     *  the data independently, without affecting the association between that data and the session.
+     *  Future queries for that session will return all data relevant to the time interval created
+     *  by the session.
+     */
     public SessionInsertRequest insertFitnessSession() {
         Log.i(TAG, "Creating a new session for an afternoon run");
-        // Setting a start and end time for our run.
-        long HOUR_IN_MS = 1000 * 60 * 60;
+        // Setting start and end times for our run.
         Date now = new Date();
-        // Set a range of the run, using a start time of 1 hour before this moment.
+        // Set a range of the run, using a start time of 1/2 hour before this moment.
         long endTime = now.getTime();
-        long startTime = endTime - (HOUR_IN_MS);
+        long startTime = endTime - (HALF_HOUR_IN_MS);
+        long startWalkTime = endTime - (TWENTY_MIN_IN_MS);
+        long endWalkTime = endTime - (TEN_MIN_IN_MS);
+
+        // Sessions may contain DataSets, which are comprised of DataPoints and a DataSource.
+        // DataPoints are comprised of a DataType, which may be derived from the DataSource,
+        // a time interval, and a value. A given DataSet may only contain data for a single
+        // DataType, but a Session can contain multiple DataSets.
 
         // Create a data source
-        DataSource dataSource = new DataSource.Builder()
+        DataSource runningDataSource = new DataSource.Builder()
                 .setAppPackageName(this.getPackageName())
-                .setDataType(DataTypes.STEP_COUNT_CUMULATIVE)
-                .setName(SAMPLE_SESSION_NAME + "- step count")
+                .setDataType(DataTypes.SPEED_SUMMARY)
+                .setName(SAMPLE_SESSION_NAME + "-running speed")
                 .setType(DataSource.TYPE_RAW)
                 .build();
 
-        int stepCountValue = 10000;
+        float runAverageSpeedMph = 9;
+        float runMaxSpeedMph = 10;
+        float runMinSpeedMph = 8;
         // Create a data set to include in the session.
-        DataSet dataSet = DataSet.create(dataSource);
-        // for each data point (startTime, endTime, stepCountValue):
-        dataSet.add(
-                dataSet.createDataPoint()
-                        .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-                        .setIntValues(stepCountValue)
+        DataSet runningDataSet = DataSet.create(runningDataSource);
+        runningDataSet.add(
+                runningDataSet.createDataPoint()
+                        .setTimeInterval(startTime, startWalkTime, TimeUnit.MILLISECONDS)
+                        .setFloatValues(runAverageSpeedMph, runMaxSpeedMph, runMinSpeedMph)
+        );
+        runningDataSet.add(
+                runningDataSet.createDataPoint()
+                        .setTimeInterval(endWalkTime, endTime, TimeUnit.MILLISECONDS)
+                        .setFloatValues(runAverageSpeedMph, runMaxSpeedMph, runMinSpeedMph)
+        );
+
+        // Create a second DataSet of the walking speed.
+        DataSource walkingDataSource = new DataSource.Builder()
+                .setAppPackageName(this.getPackageName())
+                .setDataType(DataTypes.SPEED_SUMMARY)
+                .setName(SAMPLE_SESSION_NAME + "-walking speed")
+                .setType(DataSource.TYPE_RAW)
+                .build();
+        float walkAverageSpeedMph = 4;
+        float walkMaxSpeedMph = 5;
+        float walkMinSpeedMph = 3;
+        DataSet walkingDataSet = DataSet.create(walkingDataSource);
+        walkingDataSet.add(
+                walkingDataSet.createDataPoint()
+                        .setTimeInterval(startWalkTime, endWalkTime, TimeUnit.MILLISECONDS)
+                        .setFloatValues(walkAverageSpeedMph, walkMaxSpeedMph, walkMinSpeedMph)
+        );
+
+        // Create a third DataSet of ActivitySegments to indicate the runner took a 10-minute walk
+        // in the middle of their run.
+        DataSource activitySegmentDataSource = new DataSource.Builder()
+                .setAppPackageName(this.getPackageName())
+                .setDataType(DataTypes.ACTIVITY_SEGMENT)
+                .setName(SAMPLE_SESSION_NAME + "-activity segments")
+                .setType(DataSource.TYPE_RAW)
+                .build();
+        DataSet activitySegments = DataSet.create(activitySegmentDataSource);
+        activitySegments.add(
+                activitySegments.createDataPoint()
+                        .setTimeInterval(startTime, startWalkTime, TimeUnit.MILLISECONDS)
+                        .setIntValues(FitnessActivities.RUNNING)
+        );
+        activitySegments.add(
+                activitySegments.createDataPoint()
+                        .setTimeInterval(endWalkTime, endTime, TimeUnit.MILLISECONDS)
+                        .setIntValues(FitnessActivities.RUNNING)
+        );
+        activitySegments.add(
+                activitySegments.createDataPoint()
+                        .setTimeInterval(startWalkTime, endWalkTime, TimeUnit.MILLISECONDS)
+                        .setIntValues(FitnessActivities.WALKING)
         );
 
         // Create a session with metadata about the activity.
@@ -258,14 +336,15 @@ public class MainActivity extends Activity {
         // Build a session insert request
         return new SessionInsertRequest.Builder()
                 .setSession(session)
-                .addDataSet(dataSet)
+                .addDataSet(runningDataSet)
+                .addDataSet(walkingDataSet)
+                .addDataSet(activitySegments)
                 .build();
     }
 
     public SessionReadRequest readFitnessSession() {
         Log.i(TAG, "Reading History API results for session: " + SAMPLE_SESSION_NAME);
         // Setting a start and end time for our run.
-        long WEEK_IN_MS = 1000 * 60 * 60 * 24 * 7;
         Date now = new Date();
         // Set a range of the week, using a start time of 1 week before this moment.
         long endTime = now.getTime();
@@ -274,7 +353,7 @@ public class MainActivity extends Activity {
         // Build a session read request
         return new SessionReadRequest.Builder()
                 .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-                .addDefaultDataSource(DataTypes.STEP_COUNT_CUMULATIVE)
+                .addDefaultDataSource(DataTypes.SPEED_SUMMARY)
                 .setSessionName(SAMPLE_SESSION_NAME)
                 .build();
     }
@@ -283,8 +362,7 @@ public class MainActivity extends Activity {
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
         for (DataPoint dp : dataSet.getDataPoints()) {
-            // Get start time of data point, convert from nanos to millis for date parsing,
-            // since nanoseconds aren't helpful for measuring step count..
+            // Get start time of data point, convert from nanos to millis for date parsing.
             long dpStart = dp.getStartTimeNanos() / 1000000;
             long dpEnd = dp.getEndTimeNanos() / 1000000;
             dateFormat.format(dpStart);
@@ -312,14 +390,13 @@ public class MainActivity extends Activity {
 
         // 1. Create a delete request object
         // (provide a data type and a time interval)
-        long DAY_IN_MS = 1000 * 60 * 60 * 24;
         Date now = new Date();
         // Set a range of the day, using a start time of 1 day before this moment.
         long endTime = now.getTime();
         long startTime = endTime - (DAY_IN_MS);
         DataDeleteRequest request = new DataDeleteRequest.Builder()
             .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-            .addDataType(DataTypes.STEP_COUNT_CUMULATIVE)
+            .addDataType(DataTypes.SPEED_SUMMARY)
             .deleteAllSessions() // Or specify a particular session here
             .build();
 
