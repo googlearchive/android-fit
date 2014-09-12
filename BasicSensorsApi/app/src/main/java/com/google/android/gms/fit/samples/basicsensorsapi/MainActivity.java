@@ -33,28 +33,36 @@ import com.google.android.gms.fit.samples.common.logger.Log;
 import com.google.android.gms.fit.samples.common.logger.LogView;
 import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
-import com.google.android.gms.fitness.DataPoint;
-import com.google.android.gms.fitness.DataSource;
-import com.google.android.gms.fitness.DataSourceListener;
-import com.google.android.gms.fitness.DataSourcesRequest;
-import com.google.android.gms.fitness.DataSourcesResult;
-import com.google.android.gms.fitness.DataType;
-import com.google.android.gms.fitness.DataTypes;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessScopes;
-import com.google.android.gms.fitness.SensorRequest;
-import com.google.android.gms.fitness.Value;
+import com.google.android.gms.fitness.data.DataPoint;
+import com.google.android.gms.fitness.data.DataSource;
+import com.google.android.gms.fitness.data.DataType;
+import com.google.android.gms.fitness.data.DataTypes;
+import com.google.android.gms.fitness.data.Field;
+import com.google.android.gms.fitness.data.Value;
+import com.google.android.gms.fitness.request.DataSourceListener;
+import com.google.android.gms.fitness.request.DataSourcesRequest;
+import com.google.android.gms.fitness.request.SensorRequest;
+import com.google.android.gms.fitness.result.DataSourcesResult;
 
 import java.util.concurrent.TimeUnit;
 
 
+/**
+ * This sample demonstrates how to use the Sensors API of the Google Fit platform to find
+ * available data sources and to register/unregister listeners to those sources. It also
+ * demonstrates how to authenticate a user with Google Play Services.
+ */
 public class MainActivity extends Activity {
     public static final String TAG = "BasicSensorsApi";
     private static final int REQUEST_OAUTH = 1;
 
-    // Tracks whether an authorization activity is stacking over the current activity, i.e. when
-    // a known auth error is being resolved, such as showing the account chooser or presenting a
-    // consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+    /**
+     *  Track whether an authorization activity is stacking over the current activity, i.e. when
+     *  a known auth error is being resolved, such as showing the account chooser or presenting a
+     *  consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+     */
     private static final String AUTH_PENDING = "auth_state_pending";
     private boolean authInProgress = false;
 
@@ -80,11 +88,18 @@ public class MainActivity extends Activity {
         buildFitnessClient();
     }
 
+    /**
+     *  Build a {@link GoogleApiClient} that will authenticate the user and allow the application
+     *  to connect to Fitness APIs. The scopes included should match the scopes your app needs
+     *  (see documentation for details). Authentication will occasionally fail intentionally,
+     *  and in those cases, there will be a known resolution, which the OnConnectionFailedListener()
+     *  can address. Examples of this include the user never having signed in before, or having
+     *  multiple accounts on the device and needing to specify which account to use, etc.
+     */
     private void buildFitnessClient() {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
-                .addScope(FitnessScopes.SCOPE_ACTIVITY_READ)
                 .addScope(FitnessScopes.SCOPE_LOCATION_READ)
                 .addConnectionCallbacks(
                         new GoogleApiClient.ConnectionCallbacks() {
@@ -177,18 +192,20 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Finds available data sources.  If the application cares about a data type but doesn't care
-     * about the source of the data, this can be skipped entirely, instead calling
-     * register(client, request), where the request contains the desired data type.
+     * Find available data sources and attempt to register on a specific {@link DataType}.
+     * If the application cares about a data type but doesn't care about the source of the data,
+     * this can be skipped entirely, instead calling
+     *     {@link com.google.android.gms.fitness.SensorsApi
+     *     #register(GoogleApiClient, SensorRequest, DataSourceListener)},
+     * where the {@link SensorRequest} contains the desired data type.
      */
     private void findFitnessDataSources() {
         Fitness.SensorsApi.findDataSources(mClient, new DataSourcesRequest.Builder()
                 // At least one datatype must be specified.
                 .setDataTypes(
-                        DataTypes.ACTIVITY_SAMPLE,
-                        DataTypes.LOCATION)
+                        DataTypes.LOCATION_SAMPLE)
                 // Can specify whether data type is raw or derived.
-                //.setDataSourceTypes(DataSource.TYPE_DERIVED)
+                .setDataSourceTypes(DataSource.TYPE_RAW)
                 .build())
                 .setResultCallback(new ResultCallback<DataSourcesResult>() {
                     @Override
@@ -199,21 +216,25 @@ public class MainActivity extends Activity {
                             Log.i(TAG, "Data Source type: " + dataSource.getDataType().getName());
 
                             //Let's register a listener to receive Activity data!
-                            if (dataSource.getDataType().equals(DataTypes.ACTIVITY_SAMPLE)
+                            if (dataSource.getDataType().equals(DataTypes.LOCATION_SAMPLE)
                                     && mListener == null) {
-                                Log.i(TAG, "Data source for ACTIVITY_SAMPLE found!  Registering.");
-                                registerFitnessDataListener(dataSource, DataTypes.ACTIVITY_SAMPLE);
+                                Log.i(TAG, "Data source for LOCATION_SAMPLE found!  Registering.");
+                                registerFitnessDataListener(dataSource, DataTypes.LOCATION_SAMPLE);
                             }
                         }
                     }
-        });
+                });
     }
 
+    /**
+     * Register a listener with the Sensors API for the provided {@link DataSource} and
+     * {@link DataType} combo.
+     */
     private void registerFitnessDataListener(DataSource dataSource, DataType dataType) {
         mListener = new DataSourceListener() {
             @Override
             public void onEvent(DataPoint dataPoint) {
-                for (DataType.Field field : dataPoint.getDataType().getFields()) {
+                for (Field field : dataPoint.getDataType().getFields()) {
                     Value val = dataPoint.getValue(field);
                     Log.i(TAG, "Detected DataPoint field: " + field.getName());
                     Log.i(TAG, "Detected DataPoint value: " + val);
@@ -238,11 +259,14 @@ public class MainActivity extends Activity {
                             Log.i(TAG, "Listener not registered.");
                         }
                     }
-        });
+                });
     }
 
+    /**
+     * Unregister the listener with the Sensors API.
+     */
     private void unregisterFitnessDataListener() {
-        if(mListener == null) {
+        if (mListener == null) {
             // This code only activates one listener at a time.  If there's no listener, there's
             // nothing to unregister.
             return;
@@ -263,7 +287,7 @@ public class MainActivity extends Activity {
                             Log.i(TAG, "Listener was not removed.");
                         }
                     }
-        });
+                });
     }
 
     @Override
@@ -283,8 +307,10 @@ public class MainActivity extends Activity {
         return super.onOptionsItemSelected(item);
     }
 
-    // Uses a custom log class that outputs both to in-app targets and logcat.
-    public void initializeLogging() {
+    /**
+     *  Initialize a custom log class that outputs both to in-app targets and logcat.
+     */
+    private void initializeLogging() {
         // Wraps Android's native log framework.
         LogWrapper logWrapper = new LogWrapper();
         // Using Log, front-end to the logging chain, emulates android.util.log method signatures.

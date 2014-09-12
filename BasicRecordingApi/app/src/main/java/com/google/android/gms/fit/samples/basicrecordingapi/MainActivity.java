@@ -34,21 +34,30 @@ import com.google.android.gms.fit.samples.common.logger.Log;
 import com.google.android.gms.fit.samples.common.logger.LogView;
 import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
-import com.google.android.gms.fitness.DataType;
-import com.google.android.gms.fitness.DataTypes;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessScopes;
-import com.google.android.gms.fitness.ListSubscriptionsResult;
-import com.google.android.gms.fitness.Subscription;
+import com.google.android.gms.fitness.data.DataType;
+import com.google.android.gms.fitness.data.DataTypes;
+import com.google.android.gms.fitness.data.Subscription;
+import com.google.android.gms.fitness.result.ListSubscriptionsResult;
+
+import java.util.concurrent.TimeUnit;
 
 
+/**
+ * This sample demonstrates how to use the Recording API of the Google Fit platform to subscribe
+ * to data sources, query against existing subscriptions, and remove subscriptions. It also
+ * demonstrates how to authenticate a user with Google Play Services.
+ */
 public class MainActivity extends Activity {
     public static final String TAG = "BasicRecordingApi";
     private static final int REQUEST_OAUTH = 1;
 
-    // Tracks whether an authorization activity is stacking over the current activity, i.e. when
-    // a known auth error is being resolved, such as showing the account chooser or presenting a
-    // consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+    /**
+     *  Track whether an authorization activity is stacking over the current activity, i.e. when
+     *  a known auth error is being resolved, such as showing the account chooser or presenting a
+     *  consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+     */
     private static final String AUTH_PENDING = "auth_state_pending";
     private boolean authInProgress = false;
 
@@ -69,6 +78,14 @@ public class MainActivity extends Activity {
         buildFitnessClient();
     }
 
+    /**
+     *  Build a {@link GoogleApiClient} that will authenticate the user and allow the application
+     *  to connect to Fitness APIs. The scopes included should match the scopes your app needs
+     *  (see documentation for details). Authentication will occasionally fail intentionally,
+     *  and in those cases, there will be a known resolution, which the OnConnectionFailedListener()
+     *  can address. Examples of this include the user never having signed in before, or having
+     *  multiple accounts on the device and needing to specify which account to use, etc.
+     */
     private void buildFitnessClient() {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
@@ -164,19 +181,25 @@ public class MainActivity extends Activity {
         outState.putBoolean(AUTH_PENDING, authInProgress);
     }
 
-    // Subscriptions can exist across application instances (so data is recorded even after the
-    // application closes down).  Before creating a new subscription, verify it doesn't already
-    // exist from a previous invocation of this app.  If the subscription already exists,
-    // just bail out of the method.  Because this a pending result that depends on the result
-    // of another pending result, the easiest thing to do is move it all off the UI thread
-    // so the results can be synchronous.
+    /**
+     * Subscribe to an available {@link DataType} if not already subscribed.
+     * Subscriptions can exist across application instances (so data is recorded even after the
+     * application closes down).  Before creating a new subscription, verify it doesn't already
+     * exist from a previous invocation of this app.  If the subscription already exists,
+     * just bail out of the method.  Because this a pending result that depends on the result
+     * of another pending result, the easiest thing to do is move it all off the UI thread
+     * so the results can be synchronous.
+     */
     public void subscribeIfNotAlreadySubscribed() {
         new Thread() {
             public void run() {
-                // Get a list of current subscriptions and iterate over it.
-                // Since this code isn't running on the UI thread, it's safe to await() for the
-                // result instead of creating callbacks.
-                ListSubscriptionsResult subResults = getSubscriptionsList().await();
+                // Get a list of current subscriptions and iterate over it. Since this code isn't
+                // running on the UI thread, it's safe to await() for the result instead of
+                // creating callbacks. Always set a timeout when calling await() to avoid hanging
+                // that can occur from the service being shutdown because of low memory or other
+                // conditions.
+                ListSubscriptionsResult subResults =
+                        getSubscriptionsList().await(1, TimeUnit.MINUTES);
                 boolean activitySubActive = false;
                 for (Subscription sc : subResults.getSubscriptions()) {
                     if (sc.getDataType().equals(DataTypes.ACTIVITY_SAMPLE)) {
@@ -190,12 +213,12 @@ public class MainActivity extends Activity {
                     return;
                 }
 
-                // At this point in the code, the desired subscription doesn't exist.
-
-                // Invoke the Recording API.  As soon as the subscription is active,
+                // At this point in the code, the desired subscription doesn't exist. To create
+                // one, invoke the Recording API.  As soon as the subscription is active,
                 // fitness data will start recording.
                 Status status =
-                        Fitness.RecordingApi.subscribe(mClient, DataTypes.ACTIVITY_SAMPLE).await();
+                        Fitness.RecordingApi.subscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
+                                .await(1, TimeUnit.MINUTES);
                 if (status.isSuccess()) {
                     Log.i(TAG, "Successfully subscribed!");
                 } else {
@@ -205,15 +228,23 @@ public class MainActivity extends Activity {
         }.start();
     }
 
-    // Since there are multiple things you can do with a list of subscriptions (dump to log, mine
-    // for data types, unsubscribe from everything) it's easiest to abstract out the part that
-    // wants the list, and leave it to the calling method to decide what to do with the result.
+    /**
+     *  Return a {@link PendingResult} of type {@link ListSubscriptionsResult} to determine all
+     *  existing subscriptions. Since there are multiple things you can do with a list of
+     *  subscriptions (dump to log, mine for data types, unsubscribe from everything), it's
+     *  easiest to abstract out the part that wants the list, and leave it to the calling method
+     *  to decide what to do with the result.
+     */
     private PendingResult<ListSubscriptionsResult> getSubscriptionsList() {
         // Invoke a Subscriptions list request with the Recording API
         return Fitness.RecordingApi.listSubscriptions(mClient, DataTypes.ACTIVITY_SAMPLE);
     }
 
-    public void dumpSubscriptionsList() {
+    /**
+     * Fetch a list of all active subscriptions and log it. Since the logger for this sample
+     * also prints to the screen, we can see what is happening in this way.
+     */
+    private void dumpSubscriptionsList() {
         // Create the callback to retrieve the list of subscriptions asynchronously.
         getSubscriptionsList().setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
             @Override
@@ -226,8 +257,10 @@ public class MainActivity extends Activity {
         });
     }
 
-    // Cancel all fitness API subscriptions.
-    public void cancelAllSubscriptions() {
+    /**
+     *  Cancel all Fit API subscriptions.
+     */
+    private void cancelAllSubscriptions() {
         getSubscriptionsList().setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
             @Override
             public void onResult(ListSubscriptionsResult listSubscriptionsResult) {
@@ -238,12 +271,16 @@ public class MainActivity extends Activity {
         });
     }
 
-    public void cancelSubscription(Subscription sc) {
+    /**
+     * Cancel the given subscription by calling unsubscribe on the {@link DataType} of the provided
+     * subscription.
+     */
+    private void cancelSubscription(Subscription sc) {
         final String dataTypeStr = sc.getDataType().toString();
         Log.i(TAG, "Unsubscribing from data type: " + dataTypeStr);
 
-        // Invoke the Recording API to unsubscribe from the data type and
-        // retrieve the result of the request synchronously
+        // Invoke the Recording API to unsubscribe from the data type and specify a callback that
+        // will check the result.
         Fitness.RecordingApi.unsubscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
                 .setResultCallback(new ResultCallback<Status>() {
                     @Override
@@ -278,8 +315,10 @@ public class MainActivity extends Activity {
         return super.onOptionsItemSelected(item);
     }
 
-    // Using a custom log class that outputs both to in-app targets and logcat.
-    public void initializeLogging() {
+    /**
+     *  Initialize a custom log class that outputs both to in-app targets and logcat.
+     */
+    private void initializeLogging() {
         // Wraps Android's native log framework.
         LogWrapper logWrapper = new LogWrapper();
         // Using Log, front-end to the logging chain, emulates android.util.log method signatures.

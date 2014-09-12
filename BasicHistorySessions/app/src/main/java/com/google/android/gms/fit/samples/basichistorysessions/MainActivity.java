@@ -34,39 +34,41 @@ import com.google.android.gms.fit.samples.common.logger.Log;
 import com.google.android.gms.fit.samples.common.logger.LogView;
 import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
-import com.google.android.gms.fitness.DataDeleteRequest;
-import com.google.android.gms.fitness.DataPoint;
-import com.google.android.gms.fitness.DataSet;
-import com.google.android.gms.fitness.DataSource;
-import com.google.android.gms.fitness.DataType;
-import com.google.android.gms.fitness.DataTypes;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessActivities;
 import com.google.android.gms.fitness.FitnessScopes;
-import com.google.android.gms.fitness.Session;
-import com.google.android.gms.fitness.SessionInsertRequest;
-import com.google.android.gms.fitness.SessionReadRequest;
-import com.google.android.gms.fitness.SessionReadResult;
+import com.google.android.gms.fitness.data.DataPoint;
+import com.google.android.gms.fitness.data.DataSet;
+import com.google.android.gms.fitness.data.DataSource;
+import com.google.android.gms.fitness.data.DataTypes;
+import com.google.android.gms.fitness.data.Field;
+import com.google.android.gms.fitness.data.Session;
+import com.google.android.gms.fitness.request.DataDeleteRequest;
+import com.google.android.gms.fitness.request.SessionInsertRequest;
+import com.google.android.gms.fitness.request.SessionReadRequest;
+import com.google.android.gms.fitness.result.SessionReadResult;
 
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 
+/**
+ * This sample demonstrates how to use the Sessions API of the Google Fit platform to insert
+ * sessions into the History API, query against existing data, and remove sessions. It also
+ * demonstrates how to authenticate a user with Google Play Services and how to properly
+ * represent data in a Session, as well as how to use ActivitySegments.
+ */
 public class MainActivity extends Activity {
     public static final String TAG = "BasicSessions";
     public static final String SAMPLE_SESSION_NAME = "Afternoon run";
     private static final int REQUEST_OAUTH = 1;
-
-    private static final long HALF_HOUR_IN_MS = 1000 * 60 * 30;
-    private static final long TWENTY_MIN_IN_MS = 1000 * 60 * 20;
-    private static final long TEN_MIN_IN_MS = 1000 * 60 * 10;
-    private static final long DAY_IN_MS = 1000 * 60 * 60 * 24;
-    private static final long WEEK_IN_MS = 1000 * 60 * 60 * 24 * 7;
+    private static final String DATE_FORMAT = "yyyy.MM.dd HH:mm:ss";
 
     /**
-     * Tracks whether an authorization activity is stacking over the current activity, i.e. when
+     * Track whether an authorization activity is stacking over the current activity, i.e. when
      *  a known auth error is being resolved, such as showing the account chooser or presenting a
      *  consent dialog. This avoids common duplications as might happen on screen rotations, etc.
      */
@@ -91,11 +93,19 @@ public class MainActivity extends Activity {
         buildFitnessClient();
     }
 
+    /**
+     *  Build a {@link GoogleApiClient} that will authenticate the user and allow the application
+     *  to connect to Fitness APIs. The scopes included should match the scopes your app needs
+     *  (see documentation for details). Authentication will occasionally fail intentionally,
+     *  and in those cases, there will be a known resolution, which the OnConnectionFailedListener()
+     *  can address. Examples of this include the user never having signed in before, or having
+     *  multiple accounts on the device and needing to specify which account to use, etc.
+     */
     private void buildFitnessClient() {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
-                .addScope(FitnessScopes.SCOPE_ACTIVITY_READ_WRITE)
+                .addScope(FitnessScopes.SCOPE_LOCATION_READ_WRITE)
                 .addConnectionCallbacks(
                         new GoogleApiClient.ConnectionCallbacks() {
                             @Override
@@ -185,6 +195,8 @@ public class MainActivity extends Activity {
     }
 
     /**
+     *  Create and execute a {@link SessionInsertRequest} to insert a session into the History API,
+     *  and then create and execute a {@link SessionReadRequest} to verify the insertion succeeded.
      *  By using an AsyncTask to make our calls, we can schedule synchronous calls, so that we can
      *  query for sessions after confirming that our insert was successful. Using asynchronous calls
      *  and callbacks would not guarantee that the insertion had concluded before the read request
@@ -195,25 +207,35 @@ public class MainActivity extends Activity {
         protected Void doInBackground(Void... params) {
             //First, create a new session and an insertion request.
             SessionInsertRequest insertRequest = insertFitnessSession();
-            // Then, invoke the History API to insert the session.
-            // After insertion, await the result, which is possible here because of the AsyncTask.
+
+            // Then, invoke the Sessions API to insert the session and await the result,
+            // which is possible here because of the AsyncTask. Always include a timeout when
+            // calling await() to avoid hanging that can occur from the service being shutdown
+            // because of low memory or other conditions.
+            Log.i(TAG, "Inserting the session in the History API");
             com.google.android.gms.common.api.Status insertStatus =
-                    Fitness.HistoryApi.insertSession(mClient, insertRequest).await();
+                    Fitness.SessionsApi.insertSession(mClient, insertRequest)
+                            .await(1, TimeUnit.MINUTES);
+
             // Before querying the session, check to see if the insertion succeeded.
             if (!insertStatus.isSuccess()) {
                 Log.i(TAG, "There was a problem inserting the session: " +
                         insertStatus.getStatusMessage());
                 return null;
             }
+
             // At this point, the session has been inserted and can be read.
             Log.i(TAG, "Session insert was successful!");
 
             // Begin by creating the query.
             SessionReadRequest readRequest = readFitnessSession();
-            // Invoke the History API to fetch the session with the query.
-            // And wait for the result of the read request.
+
+            // Invoke the Sessions API to fetch the session with the query and wait for the result
+            // of the read request.
             SessionReadResult sessionReadResult =
-                    Fitness.HistoryApi.readSession(mClient, readRequest).await();
+                    Fitness.SessionsApi.readSession(mClient, readRequest)
+                            .await(1, TimeUnit.MINUTES);
+
             // Get a list of the sessions that match the criteria to check the result.
             Log.i(TAG, "Session read was successful. Number of returned sessions is: "
                     + sessionReadResult.getSessions().size());
@@ -227,75 +249,79 @@ public class MainActivity extends Activity {
                     dumpDataSet(dataSet);
                 }
             }
+
             return null;
         }
     }
 
     /**
-     *  Creates an session insertion request for a run that consists of 10 minutes running,
-     *  10 minutes walking, and 10 minutes or running. The request contains three datasets:
-     *  running data, walking data, and ActivitySegments data.
+     *  Create a {@link SessionInsertRequest} for a run that consists of 10 minutes running,
+     *  10 minutes walking, and 10 minutes or running. The request contains three {@link DataSet}s:
+     *  running data, walking data, and activity segments data.
      *
-     *  Sessions are time intervals that are associated with all Fit data that falls into that time
-     *  interval. Some or all of this data can be inserted when inserting a session, or inserted
-     *  the data independently, without affecting the association between that data and the session.
-     *  Future queries for that session will return all data relevant to the time interval created
-     *  by the session.
+     *  {@link Session}s are time intervals that are associated with all Fit data that falls into
+     *  that time interval. This data can be inserted when inserting a session or independently,
+     *  without affecting the association between that data and the session. Future queries for
+     *  that session will return all data relevant to the time interval created by the session.
+     *
+     *  Sessions may contain {@link DataSet}s, which are comprised of {@link DataPoint}s and a
+     *  {@link DataSource}.
+     *  A {@link DataPoint} is associated with one of the Fit {@link DataTypes}, which may be
+     *  derived from the {@link DataSource}, as well as a time interval, and a value. A given
+     *  {@link DataSet} may only contain data for a single data type, but a {@link Session} can
+     *  contain multiple {@link DataSet}s.
      */
-    public SessionInsertRequest insertFitnessSession() {
+    private SessionInsertRequest insertFitnessSession() {
         Log.i(TAG, "Creating a new session for an afternoon run");
         // Setting start and end times for our run.
+        Calendar cal = Calendar.getInstance();
         Date now = new Date();
-        // Set a range of the run, using a start time of 1/2 hour before this moment.
-        long endTime = now.getTime();
-        long startTime = endTime - (HALF_HOUR_IN_MS);
-        long startWalkTime = endTime - (TWENTY_MIN_IN_MS);
-        long endWalkTime = endTime - (TEN_MIN_IN_MS);
-
-        // Sessions may contain DataSets, which are comprised of DataPoints and a DataSource.
-        // DataPoints are comprised of a DataType, which may be derived from the DataSource,
-        // a time interval, and a value. A given DataSet may only contain data for a single
-        // DataType, but a Session can contain multiple DataSets.
+        cal.setTime(now);
+        // Set a range of the run, using a start time of 1/2 hour before this moment,
+        // with a 10-minute walk in the middle.
+        long endTime = cal.getTimeInMillis();
+        cal.add(Calendar.MINUTE, -10);
+        long endWalkTime = cal.getTimeInMillis();
+        cal.add(Calendar.MINUTE, -10);
+        long startWalkTime = cal.getTimeInMillis();
+        cal.add(Calendar.MINUTE, -10);
+        long startTime = cal.getTimeInMillis();
 
         // Create a data source
         DataSource runningDataSource = new DataSource.Builder()
                 .setAppPackageName(this.getPackageName())
-                .setDataType(DataTypes.SPEED_SUMMARY)
+                .setDataType(DataTypes.SPEED)
                 .setName(SAMPLE_SESSION_NAME + "-running speed")
                 .setType(DataSource.TYPE_RAW)
                 .build();
 
-        float runAverageSpeedMph = 9;
-        float runMaxSpeedMph = 10;
-        float runMinSpeedMph = 8;
-        // Create a data set to include in the session.
+        float runSpeedMps = 10;
+        // Create a data set of the running speeds to include in the session.
         DataSet runningDataSet = DataSet.create(runningDataSource);
         runningDataSet.add(
                 runningDataSet.createDataPoint()
                         .setTimeInterval(startTime, startWalkTime, TimeUnit.MILLISECONDS)
-                        .setFloatValues(runAverageSpeedMph, runMaxSpeedMph, runMinSpeedMph)
+                        .setFloatValues(runSpeedMps)
         );
         runningDataSet.add(
                 runningDataSet.createDataPoint()
                         .setTimeInterval(endWalkTime, endTime, TimeUnit.MILLISECONDS)
-                        .setFloatValues(runAverageSpeedMph, runMaxSpeedMph, runMinSpeedMph)
+                        .setFloatValues(runSpeedMps)
         );
 
-        // Create a second DataSet of the walking speed.
+        // Create a second DataSet of the walking speed, with its own DataSource.
         DataSource walkingDataSource = new DataSource.Builder()
                 .setAppPackageName(this.getPackageName())
-                .setDataType(DataTypes.SPEED_SUMMARY)
+                .setDataType(DataTypes.SPEED)
                 .setName(SAMPLE_SESSION_NAME + "-walking speed")
                 .setType(DataSource.TYPE_RAW)
                 .build();
-        float walkAverageSpeedMph = 4;
-        float walkMaxSpeedMph = 5;
-        float walkMinSpeedMph = 3;
+        float walkSpeedMps = 3;
         DataSet walkingDataSet = DataSet.create(walkingDataSource);
         walkingDataSet.add(
                 walkingDataSet.createDataPoint()
                         .setTimeInterval(startWalkTime, endWalkTime, TimeUnit.MILLISECONDS)
-                        .setFloatValues(walkAverageSpeedMph, walkMaxSpeedMph, walkMinSpeedMph)
+                        .setFloatValues(walkSpeedMps)
         );
 
         // Create a third DataSet of ActivitySegments to indicate the runner took a 10-minute walk
@@ -332,7 +358,6 @@ public class MainActivity extends Activity {
                 .setEndTimeMillis(endTime)
                 .build();
 
-        Log.i(TAG, "Inserting the session in the History API");
         // Build a session insert request
         return new SessionInsertRequest.Builder()
                 .setSession(session)
@@ -342,75 +367,89 @@ public class MainActivity extends Activity {
                 .build();
     }
 
-    public SessionReadRequest readFitnessSession() {
+    /**
+     * Return a {@link SessionReadRequest} for all speed data in the past week.
+     */
+    private SessionReadRequest readFitnessSession() {
         Log.i(TAG, "Reading History API results for session: " + SAMPLE_SESSION_NAME);
-        // Setting a start and end time for our run.
+        // Set a start and end time for our query, using a start time of 1 week before this moment.
+        Calendar cal = Calendar.getInstance();
         Date now = new Date();
-        // Set a range of the week, using a start time of 1 week before this moment.
-        long endTime = now.getTime();
-        long startTime = endTime - (WEEK_IN_MS);
+        cal.setTime(now);
+        long endTime = cal.getTimeInMillis();
+        cal.add(Calendar.WEEK_OF_YEAR, -1);
+        long startTime = cal.getTimeInMillis();
 
         // Build a session read request
         return new SessionReadRequest.Builder()
                 .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-                .addDefaultDataSource(DataTypes.SPEED_SUMMARY)
+                .read(DataTypes.SPEED)
                 .setSessionName(SAMPLE_SESSION_NAME)
                 .build();
     }
 
-    public void dumpDataSet(DataSet dataSet) {
+    private void dumpDataSet(DataSet dataSet) {
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
         for (DataPoint dp : dataSet.getDataPoints()) {
             // Get start time of data point, convert from nanos to millis for date parsing.
             long dpStart = dp.getStartTimeNanos() / 1000000;
             long dpEnd = dp.getEndTimeNanos() / 1000000;
+            SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
             dateFormat.format(dpStart);
             Log.i(TAG, "Data point:");
             Log.i(TAG, "\tType: " + dp.getDataType().getName());
             Log.i(TAG, "\tStart: " + dateFormat.format(dpStart));
             Log.i(TAG, "\tEnd: " + dateFormat.format(dpEnd));
-            for(DataType.Field field : dp.getDataType().getFields()) {
+            for(Field field : dp.getDataType().getFields()) {
                 Log.i(TAG, "\tField: " + field.getName() +
                         " Value: " + dp.getValue(field));
             }
         }
     }
 
-    public void dumpSession(Session session) {
-        Log.i(TAG, "Data returned for Session: " + session.getName());
-        Log.i(TAG, "\tDescription: " + session.getDescription());
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
-        Log.i(TAG, "\tStart: " + dateFormat.format(session.getStartTimeMillis()));
-        Log.i(TAG, "\tEnd: " + dateFormat.format(session.getEndTimeMillis()));
+    private void dumpSession(Session session) {
+        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+        Log.i(TAG, "Data returned for Session: " + session.getName()
+                + "\n\tDescription: " + session.getDescription()
+                + "\n\tStart: " + dateFormat.format(session.getStartTimeMillis())
+                + "\n\tEnd: " + dateFormat.format(session.getEndTimeMillis()));
     }
 
-    public void deleteSession() {
-        Log.i(TAG, "Deleting today's sessions");
+    /**
+     * Delete the {@link DataSet} we inserted with our {@link Session} from the History API.
+     * In this example, we delete all step count data for the past 24 hours. Note that this
+     * deletion uses the History API, and not the Sessions API, since sessions are truly just time
+     * intervals over a set of data, and the data is what we are interested in removing.
+     */
+    private void deleteSession() {
+        Log.i(TAG, "Deleting today's session data  for speed");
 
-        // 1. Create a delete request object
-        // (provide a data type and a time interval)
+        // Set a start and end time for our data, using a start time of 1 day before this moment.
+        Calendar cal = Calendar.getInstance();
         Date now = new Date();
-        // Set a range of the day, using a start time of 1 day before this moment.
-        long endTime = now.getTime();
-        long startTime = endTime - (DAY_IN_MS);
+        cal.setTime(now);
+        long endTime = cal.getTimeInMillis();
+        cal.add(Calendar.DAY_OF_YEAR, -1);
+        long startTime = cal.getTimeInMillis();
+
+        // Create a delete request object, providing a data type and a time interval
         DataDeleteRequest request = new DataDeleteRequest.Builder()
             .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-            .addDataType(DataTypes.SPEED_SUMMARY)
+            .addDataType(DataTypes.SPEED)
             .deleteAllSessions() // Or specify a particular session here
             .build();
 
-        // 2. Invoke the History API with:
-        // - The Google API client object
-        // - The delete request
-        // And then check the result in the callback.
-        Fitness.HistoryApi.delete(mClient, request)
+        // Invoke the History API with the Google API client object and the delete request and
+        // specify a callback that will check the result.
+        Fitness.HistoryApi.deleteData(mClient, request)
                 .setResultCallback(new ResultCallback<Status>() {
                     @Override
                     public void onResult(Status status) {
                         if (status.isSuccess()) {
                             Log.i(TAG, "Successfully deleted today's sessions");
                         } else {
+                            // The deletion will fail if the requesting app tries to delete data
+                            // that it did not insert.
                             Log.i(TAG, "Failed to delete today's sessions");
                         }
                     }
@@ -434,8 +473,10 @@ public class MainActivity extends Activity {
         return super.onOptionsItemSelected(item);
     }
 
-    // Using a custom log class that outputs both to in-app targets and logcat.
-    public void initializeLogging() {
+    /**
+     *  Initialize a custom log class that outputs both to in-app targets and logcat.
+     */
+    private void initializeLogging() {
         // Wraps Android's native log framework.
         LogWrapper logWrapper = new LogWrapper();
         // Using Log, front-end to the logging chain, emulates android.util.log method signatures.
