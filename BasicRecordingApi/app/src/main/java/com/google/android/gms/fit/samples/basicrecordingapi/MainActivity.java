@@ -36,6 +36,7 @@ import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessScopes;
+import com.google.android.gms.fitness.FitnessStatusCodes;
 import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.DataTypes;
 import com.google.android.gms.fitness.data.Subscription;
@@ -99,7 +100,7 @@ public class MainActivity extends Activity {
                                 Log.i(TAG, "Connected!!!");
                                 // Now you can make calls to the Fitness APIs.  What to do?
                                 // Subscribe to some data sources!
-                                subscribeIfNotAlreadySubscribed();
+                                subscribe();
                             }
 
                             @Override
@@ -182,62 +183,32 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Subscribe to an available {@link DataType} if not already subscribed.
-     * Subscriptions can exist across application instances (so data is recorded even after the
-     * application closes down).  Before creating a new subscription, verify it doesn't already
-     * exist from a previous invocation of this app.  If the subscription already exists,
-     * just bail out of the method.  Because this a pending result that depends on the result
-     * of another pending result, the easiest thing to do is move it all off the UI thread
-     * so the results can be synchronous.
+     * Subscribe to an available {@link DataType}. Subscriptions can exist across application
+     * instances (so data is recorded even after the application closes down).  When creating
+     * a new subscription, it may already exist from a previous invocation of this app.  If
+     * the subscription already exists, the method is a no-op.  However, you can check this with
+     * a special success code.
      */
-    public void subscribeIfNotAlreadySubscribed() {
-        new Thread() {
-            public void run() {
-                // Get a list of current subscriptions and iterate over it. Since this code isn't
-                // running on the UI thread, it's safe to await() for the result instead of
-                // creating callbacks. Always set a timeout when calling await() to avoid hanging
-                // that can occur from the service being shutdown because of low memory or other
-                // conditions.
-                ListSubscriptionsResult subResults =
-                        getSubscriptionsList().await(1, TimeUnit.MINUTES);
-                boolean activitySubActive = false;
-                for (Subscription sc : subResults.getSubscriptions()) {
-                    if (sc.getDataType().equals(DataTypes.ACTIVITY_SAMPLE)) {
-                        activitySubActive = true;
-                        break;
+    public void subscribe() {
+        // To create a subscription, invoke the Recording API. As soon as the subscription is
+        // active, fitness data will start recording.
+        Fitness.RecordingApi.subscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
+                .setResultCallback(new ResultCallback<Status>() {
+                    @Override
+                    public void onResult(Status status) {
+                        if (status.isSuccess()) {
+                            if (status.getStatusCode()
+                                    == FitnessStatusCodes.SUCCESS_ALREADY_SUBSCRIBED) {
+                                Log.i(TAG, "Existing subscription for activity detected.");
+                            } else {
+                                Log.i(TAG, "Successfully subscribed!");
+                            }
+                        } else {
+                            Log.i(TAG, "There was a problem subscribing.");
+                        }
                     }
-                }
+        });
 
-                if(activitySubActive) {
-                    Log.i(TAG, "Existing subscription for activity detection detected.");
-                    return;
-                }
-
-                // At this point in the code, the desired subscription doesn't exist. To create
-                // one, invoke the Recording API.  As soon as the subscription is active,
-                // fitness data will start recording.
-                Status status =
-                        Fitness.RecordingApi.subscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
-                                .await(1, TimeUnit.MINUTES);
-                if (status.isSuccess()) {
-                    Log.i(TAG, "Successfully subscribed!");
-                } else {
-                    Log.i(TAG, "There was a problem subscribing.");
-                }
-            }
-        }.start();
-    }
-
-    /**
-     *  Return a {@link PendingResult} of type {@link ListSubscriptionsResult} to determine all
-     *  existing subscriptions. Since there are multiple things you can do with a list of
-     *  subscriptions (dump to log, mine for data types, unsubscribe from everything), it's
-     *  easiest to abstract out the part that wants the list, and leave it to the calling method
-     *  to decide what to do with the result.
-     */
-    private PendingResult<ListSubscriptionsResult> getSubscriptionsList() {
-        // Invoke a Subscriptions list request with the Recording API
-        return Fitness.RecordingApi.listSubscriptions(mClient, DataTypes.ACTIVITY_SAMPLE);
     }
 
     /**
@@ -245,38 +216,24 @@ public class MainActivity extends Activity {
      * also prints to the screen, we can see what is happening in this way.
      */
     private void dumpSubscriptionsList() {
-        // Create the callback to retrieve the list of subscriptions asynchronously.
-        getSubscriptionsList().setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
-            @Override
-            public void onResult(ListSubscriptionsResult listSubscriptionsResult) {
-                for (Subscription sc : listSubscriptionsResult.getSubscriptions()) {
-                    DataType dt = sc.getDataType();
-                    Log.i(TAG, "Active subscription for data type: " + dt.getName());
-                }
-            }
-        });
+        Fitness.RecordingApi.listSubscriptions(mClient, DataTypes.ACTIVITY_SAMPLE)
+                // Create the callback to retrieve the list of subscriptions asynchronously.
+                .setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
+                    @Override
+                    public void onResult(ListSubscriptionsResult listSubscriptionsResult) {
+                        for (Subscription sc : listSubscriptionsResult.getSubscriptions()) {
+                            DataType dt = sc.getDataType();
+                            Log.i(TAG, "Active subscription for data type: " + dt.getName());
+                        }
+                    }
+                });
     }
 
     /**
-     *  Cancel all Fit API subscriptions.
+     * Cancel the ACTIVITY_SAMPLE subscription by calling unsubscribe on that {@link DataType}.
      */
-    private void cancelAllSubscriptions() {
-        getSubscriptionsList().setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
-            @Override
-            public void onResult(ListSubscriptionsResult listSubscriptionsResult) {
-                for (Subscription sc : listSubscriptionsResult.getSubscriptions()) {
-                    cancelSubscription(sc);
-                }
-            }
-        });
-    }
-
-    /**
-     * Cancel the given subscription by calling unsubscribe on the {@link DataType} of the provided
-     * subscription.
-     */
-    private void cancelSubscription(Subscription sc) {
-        final String dataTypeStr = sc.getDataType().toString();
+    private void cancelSubscription() {
+        final String dataTypeStr = DataTypes.ACTIVITY_SAMPLE.toString();
         Log.i(TAG, "Unsubscribing from data type: " + dataTypeStr);
 
         // Invoke the Recording API to unsubscribe from the data type and specify a callback that
@@ -306,7 +263,7 @@ public class MainActivity extends Activity {
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.action_cancel_subs) {
-            cancelAllSubscriptions();
+            cancelSubscription();
             return true;
         } else if (id == R.id.action_dump_subs) {
             dumpSubscriptionsList();
