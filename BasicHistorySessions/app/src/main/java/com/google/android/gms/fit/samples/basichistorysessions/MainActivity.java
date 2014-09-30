@@ -106,6 +106,7 @@ public class MainActivity extends Activity {
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
                 .addScope(FitnessScopes.SCOPE_LOCATION_READ_WRITE)
+                .addScope(FitnessScopes.SCOPE_ACTIVITY_READ_WRITE)
                 .addConnectionCallbacks(
                         new GoogleApiClient.ConnectionCallbacks() {
                             @Override
@@ -208,6 +209,7 @@ public class MainActivity extends Activity {
             //First, create a new session and an insertion request.
             SessionInsertRequest insertRequest = insertFitnessSession();
 
+            // [START insert_session]
             // Then, invoke the Sessions API to insert the session and await the result,
             // which is possible here because of the AsyncTask. Always include a timeout when
             // calling await() to avoid hanging that can occur from the service being shutdown
@@ -226,10 +228,12 @@ public class MainActivity extends Activity {
 
             // At this point, the session has been inserted and can be read.
             Log.i(TAG, "Session insert was successful!");
+            // [END insert_session]
 
             // Begin by creating the query.
             SessionReadRequest readRequest = readFitnessSession();
 
+            // [START read_session]
             // Invoke the Sessions API to fetch the session with the query and wait for the result
             // of the read request.
             SessionReadResult sessionReadResult =
@@ -249,6 +253,7 @@ public class MainActivity extends Activity {
                     dumpDataSet(dataSet);
                 }
             }
+            // [END read_session]
 
             return null;
         }
@@ -324,6 +329,7 @@ public class MainActivity extends Activity {
                         .setFloatValues(walkSpeedMps)
         );
 
+        // [START build_insert_session_request_with_activity_segments]
         // Create a third DataSet of ActivitySegments to indicate the runner took a 10-minute walk
         // in the middle of their run.
         DataSource activitySegmentDataSource = new DataSource.Builder()
@@ -349,22 +355,28 @@ public class MainActivity extends Activity {
                         .setIntValues(FitnessActivities.WALKING)
         );
 
+        // [START build_insert_session_request]
         // Create a session with metadata about the activity.
         Session session = new Session.Builder()
                 .setName(SAMPLE_SESSION_NAME)
                 .setDescription("Long run around Shoreline Park")
                 .setIdentifier("UniqueIdentifierHere")
+                .setActivity(FitnessActivities.RUNNING)
                 .setStartTimeMillis(startTime)
                 .setEndTimeMillis(endTime)
                 .build();
 
         // Build a session insert request
-        return new SessionInsertRequest.Builder()
+        SessionInsertRequest insertRequest = new SessionInsertRequest.Builder()
                 .setSession(session)
                 .addDataSet(runningDataSet)
                 .addDataSet(walkingDataSet)
                 .addDataSet(activitySegments)
                 .build();
+        // [END build_insert_session_request]
+        // [END build_insert_session_request_with_activity_segments]
+
+        return insertRequest;
     }
 
     /**
@@ -372,6 +384,7 @@ public class MainActivity extends Activity {
      */
     private SessionReadRequest readFitnessSession() {
         Log.i(TAG, "Reading History API results for session: " + SAMPLE_SESSION_NAME);
+        // [START build_read_session_request]
         // Set a start and end time for our query, using a start time of 1 week before this moment.
         Calendar cal = Calendar.getInstance();
         Date now = new Date();
@@ -381,11 +394,14 @@ public class MainActivity extends Activity {
         long startTime = cal.getTimeInMillis();
 
         // Build a session read request
-        return new SessionReadRequest.Builder()
+        SessionReadRequest readRequest = new SessionReadRequest.Builder()
                 .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
                 .read(DataTypes.SPEED)
                 .setSessionName(SAMPLE_SESSION_NAME)
                 .build();
+        // [END build_read_session_request]
+
+        return readRequest;
     }
 
     private void dumpDataSet(DataSet dataSet) {

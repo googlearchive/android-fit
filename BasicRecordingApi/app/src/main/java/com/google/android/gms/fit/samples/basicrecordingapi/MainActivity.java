@@ -192,6 +192,7 @@ public class MainActivity extends Activity {
     public void subscribe() {
         // To create a subscription, invoke the Recording API. As soon as the subscription is
         // active, fitness data will start recording.
+        // [START subscribe_to_datatype]
         Fitness.RecordingApi.subscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
                 .setResultCallback(new ResultCallback<Status>() {
                     @Override
@@ -208,7 +209,7 @@ public class MainActivity extends Activity {
                         }
                     }
         });
-
+        // [END subscribe_to_datatype]
     }
 
     /**
@@ -216,6 +217,7 @@ public class MainActivity extends Activity {
      * also prints to the screen, we can see what is happening in this way.
      */
     private void dumpSubscriptionsList() {
+        // [START list_current_subscriptions]
         Fitness.RecordingApi.listSubscriptions(mClient, DataTypes.ACTIVITY_SAMPLE)
                 // Create the callback to retrieve the list of subscriptions asynchronously.
                 .setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
@@ -227,6 +229,7 @@ public class MainActivity extends Activity {
                         }
                     }
                 });
+        // [END list_current_subscriptions]
     }
 
     /**
@@ -238,6 +241,7 @@ public class MainActivity extends Activity {
 
         // Invoke the Recording API to unsubscribe from the data type and specify a callback that
         // will check the result.
+        // [START unsubscribe_from_datatype]
         Fitness.RecordingApi.unsubscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
                 .setResultCallback(new ResultCallback<Status>() {
                     @Override
@@ -250,6 +254,7 @@ public class MainActivity extends Activity {
                         }
                     }
                 });
+        // [END unsubscribe_from_datatype]
     }
 
     @Override

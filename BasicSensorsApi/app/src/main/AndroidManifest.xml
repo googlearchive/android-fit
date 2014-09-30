@@ -31,8 +31,10 @@ limitations under the License.
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- [START play_services_metadata_tag] -->
         <meta-data android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />
+        <!-- [END play_services_metadata_tag] -->
     </application>
 
 </manifest>

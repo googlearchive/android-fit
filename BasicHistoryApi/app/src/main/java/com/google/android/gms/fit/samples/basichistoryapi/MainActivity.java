@@ -205,6 +205,7 @@ public class MainActivity extends Activity {
             //First, create a new dataset and insertion request.
             DataInsertRequest insertRequest = insertFitnessData();
 
+            // [START insert_dataset]
             // Then, invoke the History API to insert the data and await the result, which is
             // possible here because of the {@link AsyncTask}. Always include a timeout when calling
             // await() to prevent hanging that can occur from the service being shutdown because
@@ -221,14 +222,17 @@ public class MainActivity extends Activity {
 
             // At this point, the data has been inserted and can be read.
             Log.i(TAG, "Data insert was successful!");
+            // [END insert_dataset]
 
             // Begin by creating the query.
             DataReadRequest readRequest = queryFitnessData();
 
+            // [START read_dataset]
             // Invoke the History API to fetch the data with the query and await the result of
             // the read request.
             DataReadResult dataReadResult =
                     Fitness.HistoryApi.readData(mClient, readRequest).await(1, TimeUnit.MINUTES);
+            // [END read_dataset]
 
             // For the sake of the sample, we'll print the data so we can see what we just added.
             // In general, logging fitness information should be avoided for privacy reasons.
@@ -245,6 +249,7 @@ public class MainActivity extends Activity {
     private DataInsertRequest insertFitnessData() {
         Log.i(TAG, "Creating a new data insert request");
 
+        // [START build_insert_data_request]
         // Set a start and end time for our data, using a start time of 1 hour before this moment.
         Calendar cal = Calendar.getInstance();
         Date now = new Date();
@@ -273,15 +278,19 @@ public class MainActivity extends Activity {
         );
 
         // Build a data insert request
-        return new DataInsertRequest.Builder()
+        DataInsertRequest insertRequest = new DataInsertRequest.Builder()
                 .setDataSet(dataSet)
                 .build();
+        // [END build_insert_data_request]
+
+        return insertRequest;
     }
 
     /**
      * Return a {@link DataReadRequest} for all step count changes in the past week.
      */
     private DataReadRequest queryFitnessData() {
+        // [START build_read_data_request]
         // Setting a start and end date using a range of 1 week before this moment.
         Calendar cal = Calendar.getInstance();
         Date now = new Date();
@@ -294,7 +303,7 @@ public class MainActivity extends Activity {
         Log.i(TAG, "Range Start: " + dateFormat.format(startTime));
         Log.i(TAG, "Range End: " + dateFormat.format(endTime));
 
-        return new DataReadRequest.Builder()
+        DataReadRequest readRequest = new DataReadRequest.Builder()
                 // The data request can specify multiple data types to return, effectively
                 // combining multiple data queries into one call.
                 // In this example, it's very unlikely that the request is for several hundred
@@ -307,6 +316,9 @@ public class MainActivity extends Activity {
                 .bucketByTime(1, TimeUnit.DAYS)
                 .setTimeRange(startTime, endTime)
                 .build();
+        // [END build_read_data_request]
+
+        return readRequest;
     }
 
     /**
@@ -318,6 +330,7 @@ public class MainActivity extends Activity {
      * directory to avoid exposing it to other applications.
      */
     private void printData(DataReadResult dataReadResult) {
+        // [START parse_read_data_result]
         // If the DataReadRequest object specified aggregated data, dataReadResult will be returned
         // as buckets containing DataSets, instead of just DataSets.
         if (dataReadResult.getBuckets().size() > 0) {
@@ -336,8 +349,10 @@ public class MainActivity extends Activity {
                 dumpDataSet(dataSet);
             }
         }
+        // [END parse_read_data_result]
     }
 
+    // [START parse_dataset]
     private void dumpDataSet(DataSet dataSet) {
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
         SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
@@ -357,6 +372,7 @@ public class MainActivity extends Activity {
             }
         }
     }
+    // [END parse_dataset]
 
     /**
      * Delete a {@link DataSet} from the History API. In this example, we delete all
@@ -365,6 +381,7 @@ public class MainActivity extends Activity {
     private void deleteData() {
         Log.i(TAG, "Deleting today's step count data");
 
+        // [START delete_dataset]
         // Set a start and end time for our data, using a start time of 1 day before this moment.
         Calendar cal = Calendar.getInstance();
         Date now = new Date();
@@ -394,6 +411,7 @@ public class MainActivity extends Activity {
                         }
                     }
         });
+        // [END delete_dataset]
     }
 
     @Override

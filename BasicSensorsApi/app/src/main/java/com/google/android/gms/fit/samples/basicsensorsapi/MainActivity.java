@@ -68,9 +68,11 @@ public class MainActivity extends Activity {
 
     private GoogleApiClient mClient = null;
 
+    // [START mListener_variable_reference]
     // Need to hold a reference to this listener, as it's passed into the "unregister"
     // method in order to stop all sensors from sending data to this listener.
     private DataSourceListener mListener;
+    // [END mListener_variable_reference]
 
 
     @Override
@@ -200,10 +202,10 @@ public class MainActivity extends Activity {
      * where the {@link SensorRequest} contains the desired data type.
      */
     private void findFitnessDataSources() {
+        // [START find_data_sources]
         Fitness.SensorsApi.findDataSources(mClient, new DataSourcesRequest.Builder()
                 // At least one datatype must be specified.
-                .setDataTypes(
-                        DataTypes.LOCATION_SAMPLE)
+                .setDataTypes(DataTypes.LOCATION_SAMPLE)
                 // Can specify whether data type is raw or derived.
                 .setDataSourceTypes(DataSource.TYPE_RAW)
                 .build())
@@ -224,6 +226,7 @@ public class MainActivity extends Activity {
                         }
                     }
                 });
+        // [END find_data_sources]
     }
 
     /**
@@ -231,6 +234,7 @@ public class MainActivity extends Activity {
      * {@link DataType} combo.
      */
     private void registerFitnessDataListener(DataSource dataSource, DataType dataType) {
+        // [START register_data_listener]
         mListener = new DataSourceListener() {
             @Override
             public void onEvent(DataPoint dataPoint) {
@@ -260,6 +264,7 @@ public class MainActivity extends Activity {
                         }
                     }
                 });
+        // [END register_data_listener]
     }
 
     /**
@@ -272,6 +277,7 @@ public class MainActivity extends Activity {
             return;
         }
 
+        // [START unregister_data_listener]
         // Waiting isn't actually necessary as the unregister call will complete regardless,
         // even if called from within onStop, but a callback can still be added in order to
         // inspect the results.
@@ -288,6 +294,7 @@ public class MainActivity extends Activity {
                         }
                     }
                 });
+        // [END unregister_data_listener]
     }
 
     @Override
