@@ -56,6 +56,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class MainActivity extends Activity {
     public static final String TAG = "BasicSensorsApi";
+    // [START auth_variable_references]
     private static final int REQUEST_OAUTH = 1;
 
     /**
@@ -67,6 +68,7 @@ public class MainActivity extends Activity {
     private boolean authInProgress = false;
 
     private GoogleApiClient mClient = null;
+    // [END auth_variable_references]
 
     // [START mListener_variable_reference]
     // Need to hold a reference to this listener, as it's passed into the "unregister"
@@ -75,13 +77,18 @@ public class MainActivity extends Activity {
     // [END mListener_variable_reference]
 
 
+    // [START auth_oncreate_setup_beginning]
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Put application specific code here.
+        // [END auth_oncreate_setup_beginning]
         setContentView(R.layout.activity_main);
         // This method sets up our custom logger, which will print all log messages to the device
         // screen, as well as to adb logcat.
         initializeLogging();
+
+        // [START auth_oncreate_setup_ending]
 
         if (savedInstanceState != null) {
             authInProgress = savedInstanceState.getBoolean(AUTH_PENDING);
@@ -89,7 +96,9 @@ public class MainActivity extends Activity {
 
         buildFitnessClient();
     }
+    // [END auth_oncreate_setup_ending]
 
+    // [START auth_build_googleapiclient_beginning]
     /**
      *  Build a {@link GoogleApiClient} that will authenticate the user and allow the application
      *  to connect to Fitness APIs. The scopes included should match the scopes your app needs
@@ -109,9 +118,13 @@ public class MainActivity extends Activity {
                             @Override
                             public void onConnected(Bundle bundle) {
                                 Log.i(TAG, "Connected!!!");
-                                // Now you can make calls to the Fitness APIs.  What to do?
-                                //Find some data sources!
+                                // Now you can make calls to the Fitness APIs.
+                                // Put application specific code here.
+                                // [END auth_build_googleapiclient_beginning]
+                                //  What to do? Find some data sources!
                                 findFitnessDataSources();
+
+                                // [START auth_build_googleapiclient_ending]
                             }
 
                             @Override
@@ -157,7 +170,9 @@ public class MainActivity extends Activity {
                 )
                 .build();
     }
+    // [END auth_build_googleapiclient_ending]
 
+    // [START auth_connection_flow_in_activity_lifecycle_methods]
     @Override
     protected void onStart() {
         super.onStart();
@@ -192,6 +207,7 @@ public class MainActivity extends Activity {
         super.onSaveInstanceState(outState);
         outState.putBoolean(AUTH_PENDING, authInProgress);
     }
+    // [END auth_connection_flow_in_activity_lifecycle_methods]
 
     /**
      * Find available data sources and attempt to register on a specific {@link DataType}.
