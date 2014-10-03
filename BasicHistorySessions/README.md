@@ -7,8 +7,8 @@ A simple example of how to use sessions with the History API on the Android Fit 
 Pre-requisites
 --------------
 
-- Android SDK (L Preview for Fit)
-- Android Build Tools v20
+- Android API Level >v9
+- Android Build Tools >v19
 - Android Support Repository
 
 Getting Started

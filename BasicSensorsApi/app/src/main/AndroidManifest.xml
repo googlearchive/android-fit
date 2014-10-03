@@ -35,6 +35,8 @@ limitations under the License.
         <meta-data android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />
         <!-- [END play_services_metadata_tag] -->
+        <!-- Note: If using AndroidStudio, Gradle will automatically add this for you. -->
+        <uses-sdk android:minSdkVersion="9" android:targetSdkVersion="19" />
     </application>
 
 </manifest>

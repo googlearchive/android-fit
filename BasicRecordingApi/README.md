@@ -7,8 +7,8 @@ A simple example of how to use the Recording API on the Android Fit platform.
 Pre-requisites
 --------------
 
-- Android SDK (L Preview for Fit)
-- Android Build Tools v20
+- Android API Level >v9
+- Android Build Tools >v19
 - Android Support Repository
 
 Getting Started
