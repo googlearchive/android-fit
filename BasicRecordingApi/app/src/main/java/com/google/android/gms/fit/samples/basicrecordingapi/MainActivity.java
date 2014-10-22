@@ -25,24 +25,21 @@ import android.view.MenuItem;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.common.Scopes;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
-import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.common.api.Status;
 import com.google.android.gms.fit.samples.common.logger.Log;
 import com.google.android.gms.fit.samples.common.logger.LogView;
 import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
 import com.google.android.gms.fitness.Fitness;
-import com.google.android.gms.fitness.FitnessScopes;
 import com.google.android.gms.fitness.FitnessStatusCodes;
 import com.google.android.gms.fitness.data.DataType;
-import com.google.android.gms.fitness.data.DataTypes;
 import com.google.android.gms.fitness.data.Subscription;
 import com.google.android.gms.fitness.result.ListSubscriptionsResult;
-
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -91,7 +88,7 @@ public class MainActivity extends Activity {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
-                .addScope(FitnessScopes.SCOPE_ACTIVITY_READ)
+                .addScope(new Scope(Scopes.FITNESS_ACTIVITY_READ))
                 .addConnectionCallbacks(
                         new GoogleApiClient.ConnectionCallbacks() {
 
@@ -193,7 +190,7 @@ public class MainActivity extends Activity {
         // To create a subscription, invoke the Recording API. As soon as the subscription is
         // active, fitness data will start recording.
         // [START subscribe_to_datatype]
-        Fitness.RecordingApi.subscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
+        Fitness.RecordingApi.subscribe(mClient, DataType.TYPE_ACTIVITY_SAMPLE)
                 .setResultCallback(new ResultCallback<Status>() {
                     @Override
                     public void onResult(Status status) {
@@ -218,7 +215,7 @@ public class MainActivity extends Activity {
      */
     private void dumpSubscriptionsList() {
         // [START list_current_subscriptions]
-        Fitness.RecordingApi.listSubscriptions(mClient, DataTypes.ACTIVITY_SAMPLE)
+        Fitness.RecordingApi.listSubscriptions(mClient, DataType.TYPE_ACTIVITY_SAMPLE)
                 // Create the callback to retrieve the list of subscriptions asynchronously.
                 .setResultCallback(new ResultCallback<ListSubscriptionsResult>() {
                     @Override
@@ -236,13 +233,13 @@ public class MainActivity extends Activity {
      * Cancel the ACTIVITY_SAMPLE subscription by calling unsubscribe on that {@link DataType}.
      */
     private void cancelSubscription() {
-        final String dataTypeStr = DataTypes.ACTIVITY_SAMPLE.toString();
+        final String dataTypeStr = DataType.TYPE_ACTIVITY_SAMPLE.toString();
         Log.i(TAG, "Unsubscribing from data type: " + dataTypeStr);
 
         // Invoke the Recording API to unsubscribe from the data type and specify a callback that
         // will check the result.
         // [START unsubscribe_from_datatype]
-        Fitness.RecordingApi.unsubscribe(mClient, DataTypes.ACTIVITY_SAMPLE)
+        Fitness.RecordingApi.unsubscribe(mClient, DataType.TYPE_ACTIVITY_SAMPLE)
                 .setResultCallback(new ResultCallback<Status>() {
                     @Override
                     public void onResult(Status status) {

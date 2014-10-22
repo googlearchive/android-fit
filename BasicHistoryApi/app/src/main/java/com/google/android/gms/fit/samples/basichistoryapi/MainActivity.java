@@ -26,25 +26,24 @@ import android.view.MenuItem;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.common.Scopes;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
 import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.common.api.Status;
 import com.google.android.gms.fit.samples.common.logger.Log;
 import com.google.android.gms.fit.samples.common.logger.LogView;
 import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
 import com.google.android.gms.fitness.Fitness;
-import com.google.android.gms.fitness.FitnessScopes;
-import com.google.android.gms.fitness.data.AggregateDataTypes;
 import com.google.android.gms.fitness.data.Bucket;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
 import com.google.android.gms.fitness.data.DataSource;
-import com.google.android.gms.fitness.data.DataTypes;
+import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.request.DataDeleteRequest;
-import com.google.android.gms.fitness.request.DataInsertRequest;
 import com.google.android.gms.fitness.request.DataReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
 
@@ -101,7 +100,7 @@ public class MainActivity extends Activity {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
-                .addScope(FitnessScopes.SCOPE_ACTIVITY_READ_WRITE)
+                .addScope(new Scope(Scopes.FITNESS_ACTIVITY_READ_WRITE))
                 .addConnectionCallbacks(
                         new GoogleApiClient.ConnectionCallbacks() {
                             @Override
@@ -192,7 +191,7 @@ public class MainActivity extends Activity {
     }
 
     /**
-     *  Create and execute a {@link DataInsertRequest} to insert data into the History API, and
+     *  Create a {@link DataSet} to insert data into the History API, and
      *  then create and execute a {@link DataReadRequest} to verify the insertion succeeded.
      *  By using an {@link AsyncTask}, we can schedule synchronous calls, so that we can query for
      *  data after confirming that our insert was successful. Using asynchronous calls and callbacks
@@ -203,7 +202,7 @@ public class MainActivity extends Activity {
     private class InsertAndVerifyDataTask extends AsyncTask<Void, Void, Void> {
         protected Void doInBackground(Void... params) {
             //First, create a new dataset and insertion request.
-            DataInsertRequest insertRequest = insertFitnessData();
+            DataSet insertRequest = insertFitnessData();
 
             // [START insert_dataset]
             // Then, invoke the History API to insert the data and await the result, which is
@@ -212,7 +211,8 @@ public class MainActivity extends Activity {
             // of low memory or other conditions.
             Log.i(TAG, "Inserting the dataset in the History API");
             com.google.android.gms.common.api.Status insertStatus =
-                    Fitness.HistoryApi.insert(mClient, insertRequest).await(1, TimeUnit.MINUTES);
+                    Fitness.HistoryApi.insertData(mClient, insertRequest)
+                            .await(1, TimeUnit.MINUTES);
 
             // Before querying the data, check to see if the insertion succeeded.
             if (!insertStatus.isSuccess()) {
@@ -243,10 +243,9 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Create a {@link DataSet} of step count data and returns a {@link DataInsertRequest} for
-     * the History API.
+     * Create and return a {@link DataSet} of step count data for the History API.
      */
-    private DataInsertRequest insertFitnessData() {
+    private DataSet insertFitnessData() {
         Log.i(TAG, "Creating a new data insert request");
 
         // [START build_insert_data_request]
@@ -261,7 +260,7 @@ public class MainActivity extends Activity {
         // Create a data source
         DataSource dataSource = new DataSource.Builder()
                 .setAppPackageName(this)
-                .setDataType(DataTypes.STEP_COUNT_DELTA)
+                .setDataType(DataType.TYPE_STEP_COUNT_DELTA)
                 .setName(TAG + " - step count")
                 .setType(DataSource.TYPE_RAW)
                 .build();
@@ -276,14 +275,9 @@ public class MainActivity extends Activity {
                         .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
                         .setIntValues(stepCountDelta)
         );
-
-        // Build a data insert request
-        DataInsertRequest insertRequest = new DataInsertRequest.Builder()
-                .setDataSet(dataSet)
-                .build();
         // [END build_insert_data_request]
 
-        return insertRequest;
+        return dataSet;
     }
 
     /**
@@ -309,12 +303,12 @@ public class MainActivity extends Activity {
                 // In this example, it's very unlikely that the request is for several hundred
                 // datapoints each consisting of a few steps and a timestamp.  The more likely
                 // scenario is wanting to see how many steps were walked per day, for 7 days.
-                .aggregate(DataTypes.STEP_COUNT_DELTA, AggregateDataTypes.STEP_COUNT_DELTA)
+                .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
                 // Analogous to a "Group By" in SQL, defines how data should be aggregated.
                 // bucketByTime allows for a time span, whereas bucketBySession would allow
                 // bucketing by "sessions", which would need to be defined in code.
                 .bucketByTime(1, TimeUnit.DAYS)
-                .setTimeRange(startTime, endTime)
+                .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
                 .build();
         // [END build_read_data_request]
 
@@ -358,14 +352,10 @@ public class MainActivity extends Activity {
         SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
 
         for (DataPoint dp : dataSet.getDataPoints()) {
-            // Get start time of data point and convert from nanos to millis for date parsing.
-            long dpStart = dp.getStartTimeNanos() / 1000000;
-            long dpEnd = dp.getEndTimeNanos() / 1000000;
-            dateFormat.format(dpStart);
             Log.i(TAG, "Data point:");
             Log.i(TAG, "\tType: " + dp.getDataType().getName());
-            Log.i(TAG, "\tStart: " + dateFormat.format(dpStart));
-            Log.i(TAG, "\tEnd: " + dateFormat.format(dpEnd));
+            Log.i(TAG, "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
+            Log.i(TAG, "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)));
             for(Field field : dp.getDataType().getFields()) {
                 Log.i(TAG, "\tField: " + field.getName() +
                         " Value: " + dp.getValue(field));
@@ -393,7 +383,7 @@ public class MainActivity extends Activity {
         //  Create a delete request object, providing a data type and a time interval
         DataDeleteRequest request = new DataDeleteRequest.Builder()
                 .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-                .addDataType(DataTypes.STEP_COUNT_DELTA)
+                .addDataType(DataType.TYPE_STEP_COUNT_DELTA)
                 .build();
 
         // Invoke the History API with the Google API client object and delete request, and then
