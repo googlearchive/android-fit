@@ -202,7 +202,7 @@ public class MainActivity extends Activity {
     private class InsertAndVerifyDataTask extends AsyncTask<Void, Void, Void> {
         protected Void doInBackground(Void... params) {
             //First, create a new dataset and insertion request.
-            DataSet insertRequest = insertFitnessData();
+            DataSet dataSet = insertFitnessData();
 
             // [START insert_dataset]
             // Then, invoke the History API to insert the data and await the result, which is
@@ -211,7 +211,7 @@ public class MainActivity extends Activity {
             // of low memory or other conditions.
             Log.i(TAG, "Inserting the dataset in the History API");
             com.google.android.gms.common.api.Status insertStatus =
-                    Fitness.HistoryApi.insertData(mClient, insertRequest)
+                    Fitness.HistoryApi.insertData(mClient, dataSet)
                             .await(1, TimeUnit.MINUTES);
 
             // Before querying the data, check to see if the insertion succeeded.
