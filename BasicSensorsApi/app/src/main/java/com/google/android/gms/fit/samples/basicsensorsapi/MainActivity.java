@@ -25,24 +25,24 @@ import android.view.MenuItem;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.common.Scopes;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
 import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.common.api.Status;
 import com.google.android.gms.fit.samples.common.logger.Log;
 import com.google.android.gms.fit.samples.common.logger.LogView;
 import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
 import com.google.android.gms.fitness.Fitness;
-import com.google.android.gms.fitness.FitnessScopes;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSource;
 import com.google.android.gms.fitness.data.DataType;
-import com.google.android.gms.fitness.data.DataTypes;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.data.Value;
-import com.google.android.gms.fitness.request.DataSourceListener;
 import com.google.android.gms.fitness.request.DataSourcesRequest;
+import com.google.android.gms.fitness.request.OnDataPointListener;
 import com.google.android.gms.fitness.request.SensorRequest;
 import com.google.android.gms.fitness.result.DataSourcesResult;
 
@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
     // [START mListener_variable_reference]
     // Need to hold a reference to this listener, as it's passed into the "unregister"
     // method in order to stop all sensors from sending data to this listener.
-    private DataSourceListener mListener;
+    private OnDataPointListener mListener;
     // [END mListener_variable_reference]
 
 
@@ -111,7 +111,7 @@ public class MainActivity extends Activity {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
-                .addScope(FitnessScopes.SCOPE_LOCATION_READ)
+                .addScope(new Scope(Scopes.FITNESS_LOCATION_READ))
                 .addConnectionCallbacks(
                         new GoogleApiClient.ConnectionCallbacks() {
 
@@ -221,7 +221,7 @@ public class MainActivity extends Activity {
         // [START find_data_sources]
         Fitness.SensorsApi.findDataSources(mClient, new DataSourcesRequest.Builder()
                 // At least one datatype must be specified.
-                .setDataTypes(DataTypes.LOCATION_SAMPLE)
+                .setDataTypes(DataType.TYPE_LOCATION_SAMPLE)
                 // Can specify whether data type is raw or derived.
                 .setDataSourceTypes(DataSource.TYPE_RAW)
                 .build())
@@ -234,10 +234,11 @@ public class MainActivity extends Activity {
                             Log.i(TAG, "Data Source type: " + dataSource.getDataType().getName());
 
                             //Let's register a listener to receive Activity data!
-                            if (dataSource.getDataType().equals(DataTypes.LOCATION_SAMPLE)
+                            if (dataSource.getDataType().equals(DataType.TYPE_LOCATION_SAMPLE)
                                     && mListener == null) {
                                 Log.i(TAG, "Data source for LOCATION_SAMPLE found!  Registering.");
-                                registerFitnessDataListener(dataSource, DataTypes.LOCATION_SAMPLE);
+                                registerFitnessDataListener(dataSource,
+                                        DataType.TYPE_LOCATION_SAMPLE);
                             }
                         }
                     }
@@ -251,9 +252,9 @@ public class MainActivity extends Activity {
      */
     private void registerFitnessDataListener(DataSource dataSource, DataType dataType) {
         // [START register_data_listener]
-        mListener = new DataSourceListener() {
+        mListener = new OnDataPointListener() {
             @Override
-            public void onEvent(DataPoint dataPoint) {
+            public void onDataPoint(DataPoint dataPoint) {
                 for (Field field : dataPoint.getDataType().getFields()) {
                     Value val = dataPoint.getValue(field);
                     Log.i(TAG, "Detected DataPoint field: " + field.getName());
@@ -262,7 +263,7 @@ public class MainActivity extends Activity {
             }
         };
 
-        Fitness.SensorsApi.register(
+        Fitness.SensorsApi.add(
                 mClient,
                 new SensorRequest.Builder()
                         .setDataSource(dataSource) // Optional but recommended for custom data sets.
@@ -297,7 +298,7 @@ public class MainActivity extends Activity {
         // Waiting isn't actually necessary as the unregister call will complete regardless,
         // even if called from within onStop, but a callback can still be added in order to
         // inspect the results.
-        Fitness.SensorsApi.unregister(
+        Fitness.SensorsApi.remove(
                 mClient,
                 mListener)
                 .setResultCallback(new ResultCallback<Status>() {

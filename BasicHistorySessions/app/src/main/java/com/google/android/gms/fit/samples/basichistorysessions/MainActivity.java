@@ -26,9 +26,11 @@ import android.view.MenuItem;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.common.Scopes;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
 import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.common.api.Status;
 import com.google.android.gms.fit.samples.common.logger.Log;
 import com.google.android.gms.fit.samples.common.logger.LogView;
@@ -36,11 +38,10 @@ import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessActivities;
-import com.google.android.gms.fitness.FitnessScopes;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
 import com.google.android.gms.fitness.data.DataSource;
-import com.google.android.gms.fitness.data.DataTypes;
+import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.data.Session;
 import com.google.android.gms.fitness.request.DataDeleteRequest;
@@ -105,8 +106,8 @@ public class MainActivity extends Activity {
         // Create the Google API Client
         mClient = new GoogleApiClient.Builder(this)
                 .addApi(Fitness.API)
-                .addScope(FitnessScopes.SCOPE_LOCATION_READ_WRITE)
-                .addScope(FitnessScopes.SCOPE_ACTIVITY_READ_WRITE)
+                .addScope(new Scope(Scopes.FITNESS_LOCATION_READ_WRITE))
+                .addScope(new Scope(Scopes.FITNESS_ACTIVITY_READ_WRITE))
                 .addConnectionCallbacks(
                         new GoogleApiClient.ConnectionCallbacks() {
                             @Override
@@ -176,6 +177,7 @@ public class MainActivity extends Activity {
             mClient.disconnect();
         }
     }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_OAUTH) {
@@ -260,9 +262,8 @@ public class MainActivity extends Activity {
     }
 
     /**
-     *  Create a {@link SessionInsertRequest} for a run that consists of 10 minutes running,
-     *  10 minutes walking, and 10 minutes or running. The request contains three {@link DataSet}s:
-     *  running data, walking data, and activity segments data.
+     *  Create a {@link SessionInsertRequest} for a 10-minute run that consists of a {@link DataSet}
+     *  for running speed.
      *
      *  {@link Session}s are time intervals that are associated with all Fit data that falls into
      *  that time interval. This data can be inserted when inserting a session or independently,
@@ -271,7 +272,7 @@ public class MainActivity extends Activity {
      *
      *  Sessions may contain {@link DataSet}s, which are comprised of {@link DataPoint}s and a
      *  {@link DataSource}.
-     *  A {@link DataPoint} is associated with one of the Fit {@link DataTypes}, which may be
+     *  A {@link DataPoint} is associated with a Fit {@link DataType}, which may be
      *  derived from the {@link DataSource}, as well as a time interval, and a value. A given
      *  {@link DataSet} may only contain data for a single data type, but a {@link Session} can
      *  contain multiple {@link DataSet}s.
@@ -282,20 +283,15 @@ public class MainActivity extends Activity {
         Calendar cal = Calendar.getInstance();
         Date now = new Date();
         cal.setTime(now);
-        // Set a range of the run, using a start time of 1/2 hour before this moment,
-        // with a 10-minute walk in the middle.
+        // Set a range of the run, using a start time of 10 minutes before this moment,
         long endTime = cal.getTimeInMillis();
-        cal.add(Calendar.MINUTE, -10);
-        long endWalkTime = cal.getTimeInMillis();
-        cal.add(Calendar.MINUTE, -10);
-        long startWalkTime = cal.getTimeInMillis();
         cal.add(Calendar.MINUTE, -10);
         long startTime = cal.getTimeInMillis();
 
         // Create a data source
         DataSource runningDataSource = new DataSource.Builder()
                 .setAppPackageName(this.getPackageName())
-                .setDataType(DataTypes.SPEED)
+                .setDataType(DataType.TYPE_SPEED)
                 .setName(SAMPLE_SESSION_NAME + "-running speed")
                 .setType(DataSource.TYPE_RAW)
                 .build();
@@ -305,54 +301,8 @@ public class MainActivity extends Activity {
         DataSet runningDataSet = DataSet.create(runningDataSource);
         runningDataSet.add(
                 runningDataSet.createDataPoint()
-                        .setTimeInterval(startTime, startWalkTime, TimeUnit.MILLISECONDS)
+                        .setTimeInterval(startTime, startTime, TimeUnit.MILLISECONDS)
                         .setFloatValues(runSpeedMps)
-        );
-        runningDataSet.add(
-                runningDataSet.createDataPoint()
-                        .setTimeInterval(endWalkTime, endTime, TimeUnit.MILLISECONDS)
-                        .setFloatValues(runSpeedMps)
-        );
-
-        // Create a second DataSet of the walking speed, with its own DataSource.
-        DataSource walkingDataSource = new DataSource.Builder()
-                .setAppPackageName(this.getPackageName())
-                .setDataType(DataTypes.SPEED)
-                .setName(SAMPLE_SESSION_NAME + "-walking speed")
-                .setType(DataSource.TYPE_RAW)
-                .build();
-        float walkSpeedMps = 3;
-        DataSet walkingDataSet = DataSet.create(walkingDataSource);
-        walkingDataSet.add(
-                walkingDataSet.createDataPoint()
-                        .setTimeInterval(startWalkTime, endWalkTime, TimeUnit.MILLISECONDS)
-                        .setFloatValues(walkSpeedMps)
-        );
-
-        // [START build_insert_session_request_with_activity_segments]
-        // Create a third DataSet of ActivitySegments to indicate the runner took a 10-minute walk
-        // in the middle of their run.
-        DataSource activitySegmentDataSource = new DataSource.Builder()
-                .setAppPackageName(this.getPackageName())
-                .setDataType(DataTypes.ACTIVITY_SEGMENT)
-                .setName(SAMPLE_SESSION_NAME + "-activity segments")
-                .setType(DataSource.TYPE_RAW)
-                .build();
-        DataSet activitySegments = DataSet.create(activitySegmentDataSource);
-        activitySegments.add(
-                activitySegments.createDataPoint()
-                        .setTimeInterval(startTime, startWalkTime, TimeUnit.MILLISECONDS)
-                        .setIntValues(FitnessActivities.RUNNING)
-        );
-        activitySegments.add(
-                activitySegments.createDataPoint()
-                        .setTimeInterval(endWalkTime, endTime, TimeUnit.MILLISECONDS)
-                        .setIntValues(FitnessActivities.RUNNING)
-        );
-        activitySegments.add(
-                activitySegments.createDataPoint()
-                        .setTimeInterval(startWalkTime, endWalkTime, TimeUnit.MILLISECONDS)
-                        .setIntValues(FitnessActivities.WALKING)
         );
 
         // [START build_insert_session_request]
@@ -362,19 +312,16 @@ public class MainActivity extends Activity {
                 .setDescription("Long run around Shoreline Park")
                 .setIdentifier("UniqueIdentifierHere")
                 .setActivity(FitnessActivities.RUNNING)
-                .setStartTimeMillis(startTime)
-                .setEndTimeMillis(endTime)
+                .setStartTime(startTime, TimeUnit.MILLISECONDS)
+                .setEndTime(endTime, TimeUnit.MILLISECONDS)
                 .build();
 
         // Build a session insert request
         SessionInsertRequest insertRequest = new SessionInsertRequest.Builder()
                 .setSession(session)
                 .addDataSet(runningDataSet)
-                .addDataSet(walkingDataSet)
-                .addDataSet(activitySegments)
                 .build();
         // [END build_insert_session_request]
-        // [END build_insert_session_request_with_activity_segments]
 
         return insertRequest;
     }
@@ -396,7 +343,7 @@ public class MainActivity extends Activity {
         // Build a session read request
         SessionReadRequest readRequest = new SessionReadRequest.Builder()
                 .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-                .read(DataTypes.SPEED)
+                .read(DataType.TYPE_SPEED)
                 .setSessionName(SAMPLE_SESSION_NAME)
                 .build();
         // [END build_read_session_request]
@@ -407,15 +354,11 @@ public class MainActivity extends Activity {
     private void dumpDataSet(DataSet dataSet) {
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
         for (DataPoint dp : dataSet.getDataPoints()) {
-            // Get start time of data point, convert from nanos to millis for date parsing.
-            long dpStart = dp.getStartTimeNanos() / 1000000;
-            long dpEnd = dp.getEndTimeNanos() / 1000000;
             SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
-            dateFormat.format(dpStart);
             Log.i(TAG, "Data point:");
             Log.i(TAG, "\tType: " + dp.getDataType().getName());
-            Log.i(TAG, "\tStart: " + dateFormat.format(dpStart));
-            Log.i(TAG, "\tEnd: " + dateFormat.format(dpEnd));
+            Log.i(TAG, "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
+            Log.i(TAG, "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)));
             for(Field field : dp.getDataType().getFields()) {
                 Log.i(TAG, "\tField: " + field.getName() +
                         " Value: " + dp.getValue(field));
@@ -427,8 +370,8 @@ public class MainActivity extends Activity {
         SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
         Log.i(TAG, "Data returned for Session: " + session.getName()
                 + "\n\tDescription: " + session.getDescription()
-                + "\n\tStart: " + dateFormat.format(session.getStartTimeMillis())
-                + "\n\tEnd: " + dateFormat.format(session.getEndTimeMillis()));
+                + "\n\tStart: " + dateFormat.format(session.getStartTime(TimeUnit.MILLISECONDS))
+                + "\n\tEnd: " + dateFormat.format(session.getEndTime(TimeUnit.MILLISECONDS)));
     }
 
     /**
@@ -438,7 +381,7 @@ public class MainActivity extends Activity {
      * intervals over a set of data, and the data is what we are interested in removing.
      */
     private void deleteSession() {
-        Log.i(TAG, "Deleting today's session data  for speed");
+        Log.i(TAG, "Deleting today's session data for speed");
 
         // Set a start and end time for our data, using a start time of 1 day before this moment.
         Calendar cal = Calendar.getInstance();
@@ -451,7 +394,7 @@ public class MainActivity extends Activity {
         // Create a delete request object, providing a data type and a time interval
         DataDeleteRequest request = new DataDeleteRequest.Builder()
             .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-            .addDataType(DataTypes.SPEED)
+            .addDataType(DataType.TYPE_SPEED)
             .deleteAllSessions() // Or specify a particular session here
             .build();
 
