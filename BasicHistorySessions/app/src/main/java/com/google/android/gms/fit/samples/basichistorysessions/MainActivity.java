@@ -15,12 +15,12 @@
  */
 package com.google.android.gms.fit.samples.basichistorysessions;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuItem;
 
@@ -62,7 +62,7 @@ import java.util.concurrent.TimeUnit;
  * demonstrates how to authenticate a user with Google Play Services and how to properly
  * represent data in a Session, as well as how to use ActivitySegments.
  */
-public class MainActivity extends Activity {
+public class MainActivity extends ActionBarActivity {
     public static final String TAG = "BasicSessions";
     public static final String SAMPLE_SESSION_NAME = "Afternoon run";
     private static final int REQUEST_OAUTH = 1;
@@ -262,8 +262,9 @@ public class MainActivity extends Activity {
     }
 
     /**
-     *  Create a {@link SessionInsertRequest} for a 10-minute run that consists of a {@link DataSet}
-     *  for running speed.
+     *  Create a {@link SessionInsertRequest} for a run that consists of 10 minutes running,
+     *  10 minutes walking, and 10 minutes of running. The request contains two {@link DataSet}s:
+     *  speed data and activity segments data.
      *
      *  {@link Session}s are time intervals that are associated with all Fit data that falls into
      *  that time interval. This data can be inserted when inserting a session or independently,
@@ -283,27 +284,69 @@ public class MainActivity extends Activity {
         Calendar cal = Calendar.getInstance();
         Date now = new Date();
         cal.setTime(now);
-        // Set a range of the run, using a start time of 10 minutes before this moment,
+        // Set a range of the run, using a start time of 30 minutes before this moment,
+        // with a 10-minute walk in the middle.
         long endTime = cal.getTimeInMillis();
+        cal.add(Calendar.MINUTE, -10);
+        long endWalkTime = cal.getTimeInMillis();
+        cal.add(Calendar.MINUTE, -10);
+        long startWalkTime = cal.getTimeInMillis();
         cal.add(Calendar.MINUTE, -10);
         long startTime = cal.getTimeInMillis();
 
         // Create a data source
-        DataSource runningDataSource = new DataSource.Builder()
+        DataSource speedDataSource = new DataSource.Builder()
                 .setAppPackageName(this.getPackageName())
                 .setDataType(DataType.TYPE_SPEED)
-                .setName(SAMPLE_SESSION_NAME + "-running speed")
+                .setName(SAMPLE_SESSION_NAME + "- speed")
                 .setType(DataSource.TYPE_RAW)
                 .build();
 
         float runSpeedMps = 10;
-        // Create a data set of the running speeds to include in the session.
-        DataSet runningDataSet = DataSet.create(runningDataSource);
-        runningDataSet.add(
-                runningDataSet.createDataPoint()
-                        .setTimeInterval(startTime, startTime, TimeUnit.MILLISECONDS)
-                        .setFloatValues(runSpeedMps)
-        );
+        float walkSpeedMps = 3;
+        // Create a data set of the run speeds to include in the session.
+        DataSet speedDataSet = DataSet.create(speedDataSource);
+
+        DataPoint firstRunSpeed = speedDataSet.createDataPoint()
+                .setTimeInterval(startTime, startWalkTime, TimeUnit.MILLISECONDS);
+        firstRunSpeed.getValue(Field.FIELD_SPEED).setFloat(runSpeedMps);
+        speedDataSet.add(firstRunSpeed);
+
+        DataPoint walkSpeed = speedDataSet.createDataPoint()
+                .setTimeInterval(startWalkTime, endWalkTime, TimeUnit.MILLISECONDS);
+        walkSpeed.getValue(Field.FIELD_SPEED).setFloat(walkSpeedMps);
+        speedDataSet.add(walkSpeed);
+
+        DataPoint secondRunSpeed = speedDataSet.createDataPoint()
+                .setTimeInterval(endWalkTime, endTime, TimeUnit.MILLISECONDS);
+        secondRunSpeed.getValue(Field.FIELD_SPEED).setFloat(runSpeedMps);
+        speedDataSet.add(secondRunSpeed);
+
+        // [START build_insert_session_request_with_activity_segments]
+        // Create a second DataSet of ActivitySegments to indicate the runner took a 10-minute walk
+        // in the middle of the run.
+        DataSource activitySegmentDataSource = new DataSource.Builder()
+                .setAppPackageName(this.getPackageName())
+                .setDataType(DataType.TYPE_ACTIVITY_SEGMENT)
+                .setName(SAMPLE_SESSION_NAME + "-activity segments")
+                .setType(DataSource.TYPE_RAW)
+                .build();
+        DataSet activitySegments = DataSet.create(activitySegmentDataSource);
+
+        DataPoint firstRunningDp = activitySegments.createDataPoint()
+                .setTimeInterval(startTime, startWalkTime, TimeUnit.MILLISECONDS);
+        firstRunningDp.getValue(Field.FIELD_ACTIVITY).setActivity(FitnessActivities.RUNNING);
+        activitySegments.add(firstRunningDp);
+
+        DataPoint walkingDp = activitySegments.createDataPoint()
+                .setTimeInterval(startWalkTime, endWalkTime, TimeUnit.MILLISECONDS);
+        walkingDp.getValue(Field.FIELD_ACTIVITY).setActivity(FitnessActivities.WALKING);
+        activitySegments.add(walkingDp);
+
+        DataPoint secondRunningDp = activitySegments.createDataPoint()
+                .setTimeInterval(endWalkTime, endTime, TimeUnit.MILLISECONDS);
+        secondRunningDp.getValue(Field.FIELD_ACTIVITY).setActivity(FitnessActivities.RUNNING);
+        activitySegments.add(secondRunningDp);
 
         // [START build_insert_session_request]
         // Create a session with metadata about the activity.
@@ -319,9 +362,11 @@ public class MainActivity extends Activity {
         // Build a session insert request
         SessionInsertRequest insertRequest = new SessionInsertRequest.Builder()
                 .setSession(session)
-                .addDataSet(runningDataSet)
+                .addDataSet(speedDataSet)
+                .addDataSet(activitySegments)
                 .build();
         // [END build_insert_session_request]
+        // [END build_insert_session_request_with_activity_segments]
 
         return insertRequest;
     }

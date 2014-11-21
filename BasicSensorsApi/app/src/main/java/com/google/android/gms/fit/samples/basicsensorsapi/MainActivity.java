@@ -15,11 +15,11 @@
  */
 package com.google.android.gms.fit.samples.basicsensorsapi;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuItem;
 
@@ -54,7 +54,7 @@ import java.util.concurrent.TimeUnit;
  * available data sources and to register/unregister listeners to those sources. It also
  * demonstrates how to authenticate a user with Google Play Services.
  */
-public class MainActivity extends Activity {
+public class MainActivity extends ActionBarActivity {
     public static final String TAG = "BasicSensorsApi";
     // [START auth_variable_references]
     private static final int REQUEST_OAUTH = 1;

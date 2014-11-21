@@ -15,11 +15,11 @@
  */
 package com.google.android.gms.fit.samples.basicrecordingapi;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuItem;
 
@@ -47,7 +47,7 @@ import com.google.android.gms.fitness.result.ListSubscriptionsResult;
  * to data sources, query against existing subscriptions, and remove subscriptions. It also
  * demonstrates how to authenticate a user with Google Play Services.
  */
-public class MainActivity extends Activity {
+public class MainActivity extends ActionBarActivity {
     public static final String TAG = "BasicRecordingApi";
     private static final int REQUEST_OAUTH = 1;
 

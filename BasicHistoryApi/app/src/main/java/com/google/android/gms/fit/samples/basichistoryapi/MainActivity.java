@@ -15,12 +15,12 @@
  */
 package com.google.android.gms.fit.samples.basichistoryapi;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuItem;
 
@@ -58,7 +58,7 @@ import java.util.concurrent.TimeUnit;
  * query against existing data, and remove data. It also demonstrates how to authenticate
  * a user with Google Play Services and how to properly represent data in a {@link DataSet}.
  */
-public class MainActivity extends Activity {
+public class MainActivity extends ActionBarActivity {
     public static final String TAG = "BasicHistoryApi";
     private static final int REQUEST_OAUTH = 1;
     private static final String DATE_FORMAT = "yyyy.MM.dd HH:mm:ss";
@@ -270,11 +270,10 @@ public class MainActivity extends Activity {
         DataSet dataSet = DataSet.create(dataSource);
         // For each data point, specify a start time, end time, and the data value -- in this case,
         // the number of new steps.
-        dataSet.add(
-                dataSet.createDataPoint()
-                        .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-                        .setIntValues(stepCountDelta)
-        );
+        DataPoint dataPoint = dataSet.createDataPoint()
+                .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS);
+        dataPoint.getValue(Field.FIELD_STEPS).setInt(stepCountDelta);
+        dataSet.add(dataPoint);
         // [END build_insert_data_request]
 
         return dataSet;
