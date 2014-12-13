@@ -1,4 +1,3 @@
-apply plugin: 'com.android.application'
 apply plugin: 'android'
 
 android {
@@ -14,7 +13,7 @@ android {
     }
     buildTypes {
         release {
-            runProguard false
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
