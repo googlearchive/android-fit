@@ -7,9 +7,11 @@ Example of how to use the Android Fit platform.
 Pre-requisites
 --------------
 
-- Android SDK (L Preview for Fit)
-- Android Build Tools v20
+- Android SDK
+- Android Build Tools v23
 - Android Support Repository
+- Register a Google Project with an Android client per getting started instructions
+  http://developers.google.com/fit/android/get-started
 
 Getting Started
 ---------------
