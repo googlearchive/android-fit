@@ -105,7 +105,7 @@ public class MainActivity extends AppCompatActivity {
                                 MainActivity.this.findViewById(R.id.main_activity_view),
                                 "Exception while connecting to Google Play services: " +
                                         result.getErrorMessage(),
-                                Snackbar.LENGTH_INDEFINITE);
+                                Snackbar.LENGTH_INDEFINITE).show();
                     }
                 })
                 .build();

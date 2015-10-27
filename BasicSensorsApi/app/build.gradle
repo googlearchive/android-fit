@@ -22,7 +22,7 @@ android {
 dependencies {
     // Note, specific version numbers are managed in gradle.properties. This is preferred since it
     // easily keeps sub-projects on the same versions.
-    compile "com.google.android.gms:play-services:${google_play_services_library}"
+    compile "com.google.android.gms:play-services-fitness:${google_play_services_library}"
     compile "com.android.support:appcompat-v7:${google_support_library}"
     compile "com.android.support:design:${google_support_library}"
     compile fileTree(dir: 'libs', include: ['*.jar'])
