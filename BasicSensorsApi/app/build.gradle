@@ -1,15 +1,15 @@
-apply plugin: 'android'
+apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 21
-    buildToolsVersion "21.1.2"
+    compileSdkVersion 23
+    buildToolsVersion "23.0.1"
 
     defaultConfig {
         applicationId "com.google.android.gms.fit.samples.basicsensorsapi"
         minSdkVersion 9
-        targetSdkVersion 21
-        versionCode 1
-        versionName "1.0"
+        targetSdkVersion 22
+        versionCode 2 
+        versionName "1.1"
     }
     buildTypes {
         release {
@@ -20,7 +20,10 @@ android {
 }
 
 dependencies {
-    compile 'com.google.android.gms:play-services:7.0.+'
-    compile "com.android.support:appcompat-v7:21.0.3"
+    // Note, specific version numbers are managed in gradle.properties. This is preferred since it
+    // easily keeps sub-projects on the same versions.
+    compile "com.google.android.gms:play-services:${google_play_services_library}"
+    compile "com.android.support:appcompat-v7:${google_support_library}"
+    compile "com.android.support:design:${google_support_library}"
     compile fileTree(dir: 'libs', include: ['*.jar'])
 }

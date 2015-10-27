@@ -15,16 +15,7 @@
  */
 package com.google.android.gms.fit.samples.basicsensorsapi;
 
-import android.content.Intent;
-import android.content.IntentSender;
-import android.graphics.Color;
-import android.os.Bundle;
-import android.support.v7.app.ActionBarActivity;
-import android.view.Menu;
-import android.view.MenuItem;
-
 import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.Scopes;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
@@ -46,6 +37,13 @@ import com.google.android.gms.fitness.request.OnDataPointListener;
 import com.google.android.gms.fitness.request.SensorRequest;
 import com.google.android.gms.fitness.result.DataSourcesResult;
 
+import android.graphics.Color;
+import android.os.Bundle;
+import android.support.design.widget.Snackbar;
+import android.support.v7.app.AppCompatActivity;
+import android.view.Menu;
+import android.view.MenuItem;
+
 import java.util.concurrent.TimeUnit;
 
 
@@ -54,19 +52,9 @@ import java.util.concurrent.TimeUnit;
  * available data sources and to register/unregister listeners to those sources. It also
  * demonstrates how to authenticate a user with Google Play Services.
  */
-public class MainActivity extends ActionBarActivity {
+public class MainActivity extends AppCompatActivity {
     public static final String TAG = "BasicSensorsApi";
     // [START auth_variable_references]
-    private static final int REQUEST_OAUTH = 1;
-
-    /**
-     *  Track whether an authorization activity is stacking over the current activity, i.e. when
-     *  a known auth error is being resolved, such as showing the account chooser or presenting a
-     *  consent dialog. This avoids common duplications as might happen on screen rotations, etc.
-     */
-    private static final String AUTH_PENDING = "auth_state_pending";
-    private boolean authInProgress = false;
-
     private GoogleApiClient mClient = null;
     // [END auth_variable_references]
 
@@ -89,10 +77,6 @@ public class MainActivity extends ActionBarActivity {
         initializeLogging();
 
         // [START auth_oncreate_setup_ending]
-
-        if (savedInstanceState != null) {
-            authInProgress = savedInstanceState.getBoolean(AUTH_PENDING);
-        }
 
         buildFitnessClient();
     }
@@ -139,75 +123,21 @@ public class MainActivity extends ActionBarActivity {
                             }
                         }
                 )
-                .addOnConnectionFailedListener(
-                        new GoogleApiClient.OnConnectionFailedListener() {
-                            // Called whenever the API client fails to connect.
-                            @Override
-                            public void onConnectionFailed(ConnectionResult result) {
-                                Log.i(TAG, "Connection failed. Cause: " + result.toString());
-                                if (!result.hasResolution()) {
-                                    // Show the localized error dialog
-                                    GooglePlayServicesUtil.getErrorDialog(result.getErrorCode(),
-                                            MainActivity.this, 0).show();
-                                    return;
-                                }
-                                // The failure has a resolution. Resolve it.
-                                // Called typically when the app is not yet authorized, and an
-                                // authorization dialog is displayed to the user.
-                                if (!authInProgress) {
-                                    try {
-                                        Log.i(TAG, "Attempting to resolve failed connection");
-                                        authInProgress = true;
-                                        result.startResolutionForResult(MainActivity.this,
-                                                REQUEST_OAUTH);
-                                    } catch (IntentSender.SendIntentException e) {
-                                        Log.e(TAG,
-                                                "Exception while starting resolution activity", e);
-                                    }
-                                }
-                            }
-                        }
-                )
+                .enableAutoManage(this, 0, new GoogleApiClient.OnConnectionFailedListener() {
+                    @Override
+                    public void onConnectionFailed(ConnectionResult result) {
+                        Log.i(TAG, "Google Play services connection failed. Cause: " +
+                                result.toString());
+                        Snackbar.make(
+                                MainActivity.this.findViewById(R.id.main_activity_view),
+                                "Exception while connecting to Google Play services: " +
+                                        result.getErrorMessage(),
+                                Snackbar.LENGTH_INDEFINITE);
+                    }
+                })
                 .build();
     }
     // [END auth_build_googleapiclient_ending]
-
-    // [START auth_connection_flow_in_activity_lifecycle_methods]
-    @Override
-    protected void onStart() {
-        super.onStart();
-        // Connect to the Fitness API
-        Log.i(TAG, "Connecting...");
-        mClient.connect();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (mClient.isConnected()) {
-            mClient.disconnect();
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_OAUTH) {
-            authInProgress = false;
-            if (resultCode == RESULT_OK) {
-                // Make sure the app is not already connected or attempting to connect
-                if (!mClient.isConnecting() && !mClient.isConnected()) {
-                    mClient.connect();
-                }
-            }
-        }
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putBoolean(AUTH_PENDING, authInProgress);
-    }
-    // [END auth_connection_flow_in_activity_lifecycle_methods]
 
     /**
      * Find available data sources and attempt to register on a specific {@link DataType}.
@@ -344,7 +274,7 @@ public class MainActivity extends ActionBarActivity {
         logWrapper.setNext(msgFilter);
         // On screen logging via a customized TextView.
         LogView logView = (LogView) findViewById(R.id.sample_logview);
-        logView.setTextAppearance(this, R.style.Log);
+        logView.setTextAppearance(R.style.Log);
         logView.setBackgroundColor(Color.WHITE);
         msgFilter.setNext(logView);
         Log.i(TAG, "Ready");
