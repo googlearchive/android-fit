@@ -7,7 +7,7 @@ android {
     defaultConfig {
         applicationId "com.google.android.gms.fit.samples.basicsensorsapi"
         minSdkVersion 9
-        targetSdkVersion 22
+        targetSdkVersion 23
         versionCode 2 
         versionName "1.1"
     }
