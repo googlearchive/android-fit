@@ -15,6 +15,14 @@
  */
 package com.google.android.gms.fit.samples.basichistoryapi;
 
+import android.graphics.Color;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.support.design.widget.Snackbar;
+import android.support.v7.app.AppCompatActivity;
+import android.view.Menu;
+import android.view.MenuItem;
+
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.Scopes;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -37,19 +45,14 @@ import com.google.android.gms.fitness.request.DataDeleteRequest;
 import com.google.android.gms.fitness.request.DataReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
 
-import android.graphics.Color;
-import android.os.AsyncTask;
-import android.os.Bundle;
-import android.support.design.widget.Snackbar;
-import android.support.v7.app.AppCompatActivity;
-import android.view.Menu;
-import android.view.MenuItem;
-
-import java.text.SimpleDateFormat;
+import java.text.DateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import static java.text.DateFormat.getDateInstance;
+import static java.text.DateFormat.getTimeInstance;
 
 /**
  * This sample demonstrates how to use the History API of the Google Fit platform to insert data,
@@ -238,7 +241,7 @@ public class MainActivity extends AppCompatActivity {
         cal.add(Calendar.WEEK_OF_YEAR, -1);
         long startTime = cal.getTimeInMillis();
 
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+        java.text.DateFormat dateFormat = getDateInstance();
         Log.i(TAG, "Range Start: " + dateFormat.format(startTime));
         Log.i(TAG, "Range End: " + dateFormat.format(endTime));
 
@@ -294,7 +297,7 @@ public class MainActivity extends AppCompatActivity {
     // [START parse_dataset]
     private void dumpDataSet(DataSet dataSet) {
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+        DateFormat dateFormat = getTimeInstance();
 
         for (DataPoint dp : dataSet.getDataPoints()) {
             Log.i(TAG, "Data point:");
@@ -379,7 +382,11 @@ public class MainActivity extends AppCompatActivity {
         logWrapper.setNext(msgFilter);
         // On screen logging via a customized TextView.
         LogView logView = (LogView) findViewById(R.id.sample_logview);
-        logView.setTextAppearance(R.style.Log);
+
+        // Fixing this lint error adds logic without benefit.
+        //noinspection AndroidLintDeprecation
+        logView.setTextAppearance(this, R.style.Log);
+
         logView.setBackgroundColor(Color.WHITE);
         msgFilter.setNext(logView);
         Log.i(TAG, "Ready");

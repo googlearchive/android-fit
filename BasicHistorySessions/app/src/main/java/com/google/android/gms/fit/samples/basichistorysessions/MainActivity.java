@@ -55,11 +55,13 @@ import com.google.android.gms.fitness.request.SessionInsertRequest;
 import com.google.android.gms.fitness.request.SessionReadRequest;
 import com.google.android.gms.fitness.result.SessionReadResult;
 
-import java.text.SimpleDateFormat;
+import java.text.DateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import static java.text.DateFormat.getTimeInstance;
 
 
 /**
@@ -359,7 +361,7 @@ public class MainActivity extends AppCompatActivity {
     private void dumpDataSet(DataSet dataSet) {
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
         for (DataPoint dp : dataSet.getDataPoints()) {
-            SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+            DateFormat dateFormat = getTimeInstance();
             Log.i(TAG, "Data point:");
             Log.i(TAG, "\tType: " + dp.getDataType().getName());
             Log.i(TAG, "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
@@ -372,7 +374,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void dumpSession(Session session) {
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+        DateFormat dateFormat = getTimeInstance();
         Log.i(TAG, "Data returned for Session: " + session.getName()
                 + "\n\tDescription: " + session.getDescription()
                 + "\n\tStart: " + dateFormat.format(session.getStartTime(TimeUnit.MILLISECONDS))
@@ -417,7 +419,7 @@ public class MainActivity extends AppCompatActivity {
                             Log.i(TAG, "Failed to delete today's sessions");
                         }
                     }
-        });
+                });
     }
 
     @Override
@@ -450,7 +452,11 @@ public class MainActivity extends AppCompatActivity {
         logWrapper.setNext(msgFilter);
         // On screen logging via a customized TextView.
         LogView logView = (LogView) findViewById(R.id.sample_logview);
-        logView.setTextAppearance(R.style.Log);
+
+        // Fixing this lint errors adds logic without benefit.
+        //noinspection AndroidLintDeprecation
+        logView.setTextAppearance(this, R.style.Log);
+
         logView.setBackgroundColor(Color.WHITE);
         msgFilter.setNext(logView);
         Log.i(TAG, "Ready");

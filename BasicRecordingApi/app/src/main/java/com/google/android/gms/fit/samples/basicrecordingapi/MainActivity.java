@@ -15,6 +15,13 @@
  */
 package com.google.android.gms.fit.samples.basicrecordingapi;
 
+import android.graphics.Color;
+import android.os.Bundle;
+import android.support.design.widget.Snackbar;
+import android.support.v7.app.AppCompatActivity;
+import android.view.Menu;
+import android.view.MenuItem;
+
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.Scopes;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -31,13 +38,6 @@ import com.google.android.gms.fitness.FitnessStatusCodes;
 import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Subscription;
 import com.google.android.gms.fitness.result.ListSubscriptionsResult;
-
-import android.graphics.Color;
-import android.os.Bundle;
-import android.support.design.widget.Snackbar;
-import android.support.v7.app.AppCompatActivity;
-import android.view.Menu;
-import android.view.MenuItem;
 
 
 /**
@@ -219,7 +219,11 @@ public class MainActivity extends AppCompatActivity {
         logWrapper.setNext(msgFilter);
         // On screen logging via a customized TextView.
         LogView logView = (LogView) findViewById(R.id.sample_logview);
-        logView.setTextAppearance(R.style.Log);
+
+        // Fixing this lint error adds logic without benefit.
+        //noinspection AndroidLintDeprecation
+        logView.setTextAppearance(this, R.style.Log);
+
         logView.setBackgroundColor(Color.WHITE);
         msgFilter.setNext(logView);
         Log.i(TAG, "Ready");

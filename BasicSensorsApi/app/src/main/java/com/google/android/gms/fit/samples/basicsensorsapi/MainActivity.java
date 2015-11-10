@@ -293,7 +293,11 @@ public class MainActivity extends AppCompatActivity {
         logWrapper.setNext(msgFilter);
         // On screen logging via a customized TextView.
         LogView logView = (LogView) findViewById(R.id.sample_logview);
-        logView.setTextAppearance(R.style.Log);
+
+        // Fixing this lint errors adds logic without benefit.
+        //noinspection AndroidLintDeprecation
+        logView.setTextAppearance(this, R.style.Log);
+
         logView.setBackgroundColor(Color.WHITE);
         msgFilter.setNext(logView);
         Log.i(TAG, "Ready");
