@@ -155,7 +155,7 @@ public class MainActivity extends AppCompatActivity {
                     .build();
         }
     }
-    // [END auth_build_googleapiclient_ending]
+    // [END auth_build_googleapiclient_beginning]
 
     /**
      * Find available data sources and attempt to register on a specific {@link DataType}.
