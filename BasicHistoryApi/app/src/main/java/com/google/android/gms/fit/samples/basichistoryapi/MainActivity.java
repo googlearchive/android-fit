@@ -43,6 +43,7 @@ import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.request.DataDeleteRequest;
 import com.google.android.gms.fitness.request.DataReadRequest;
+import com.google.android.gms.fitness.request.DataUpdateRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
 
 import java.text.DateFormat;
@@ -150,7 +151,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private class InsertAndVerifyDataTask extends AsyncTask<Void, Void, Void> {
         protected Void doInBackground(Void... params) {
-            //First, create a new dataset and insertion request.
+            // Create a new dataset and insertion request.
             DataSet dataSet = insertFitnessData();
 
             // [START insert_dataset]
@@ -191,11 +192,69 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void updateData() {
+        new UpdateAndVerifyDataTask().execute();
+    }
+
     /**
-     * Create and return a {@link DataSet} of step count data for the History API.
+     *  Create a {@link DataSet} to update step data, and
+     *  then create and execute a {@link DataReadRequest} to verify the insertion succeeded.
+     *  By using an {@link AsyncTask}, we can schedule synchronous calls, so that we can query for
+     *  data after confirming that our insert was successful.
+     */
+    private class UpdateAndVerifyDataTask extends AsyncTask<Void, Void, Void> {
+        protected Void doInBackground(Void... params) {
+            // Create a new dataset and update request.
+            DataSet dataSet = updateFitnessData();
+            long startTime = 0;
+            long endTime = 0;
+
+            // Get the start and end times from the dataset.
+            for (DataPoint dataPoint : dataSet.getDataPoints()) {
+                startTime = dataPoint.getStartTime(TimeUnit.MILLISECONDS);
+                endTime = dataPoint.getEndTime(TimeUnit.MILLISECONDS);
+            }
+
+            // [START update_data_request]
+            Log.i(TAG, "Updating the dataset in the History API.");
+
+
+            DataUpdateRequest request = new DataUpdateRequest.Builder()
+                    .setDataSet(dataSet)
+                    .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
+                    .build();
+
+            com.google.android.gms.common.api.Status updateStatus =
+                    Fitness.HistoryApi.updateData(mClient, request)
+                            .await(1, TimeUnit.MINUTES);
+
+            // Before querying the data, check to see if the update succeeded.
+            if (!updateStatus .isSuccess()) {
+                Log.i(TAG, "There was a problem updating the dataset.");
+                return null;
+            }
+
+            // At this point the data has been updated and can be read.
+            Log.i(TAG, "Data update was successful.");
+            // [END update_data_request]
+
+            // Create the query.
+            DataReadRequest readRequest = queryFitnessData();
+
+            DataReadResult dataReadResult =
+                    Fitness.HistoryApi.readData(mClient, readRequest).await(1, TimeUnit.MINUTES);
+
+            printData(dataReadResult);
+
+            return null;
+        }
+    }
+
+    /**
+     * Create and return a {@link DataSet} of step count data for insertion using the History API.
      */
     private DataSet insertFitnessData() {
-        Log.i(TAG, "Creating a new data insert request");
+        Log.i(TAG, "Creating a new data insert request.");
 
         // [START build_insert_data_request]
         // Set a start and end time for our data, using a start time of 1 hour before this moment.
@@ -210,7 +269,46 @@ public class MainActivity extends AppCompatActivity {
         DataSource dataSource = new DataSource.Builder()
                 .setAppPackageName(this)
                 .setDataType(DataType.TYPE_STEP_COUNT_DELTA)
-                .setName(TAG + " - step count")
+                .setStreamName(TAG + " - step count")
+                .setType(DataSource.TYPE_RAW)
+                .build();
+
+        // Create a data set
+        int stepCountDelta = 950;
+        DataSet dataSet = DataSet.create(dataSource);
+        // For each data point, specify a start time, end time, and the data value -- in this case,
+        // the number of new steps.
+        DataPoint dataPoint = dataSet.createDataPoint()
+                .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS);
+        dataPoint.getValue(Field.FIELD_STEPS).setInt(stepCountDelta);
+        dataSet.add(dataPoint);
+        // [END build_insert_data_request]
+
+        return dataSet;
+    }
+
+    /**
+     * Create and return a {@link DataSet} of step count data to update.
+     */
+    private DataSet updateFitnessData() {
+        Log.i(TAG, "Creating a new data update request.");
+
+        // [START build_update_data_request]
+        // Set a start and end time for the data that fits within the time range
+        // of the original insertion.
+        Calendar cal = Calendar.getInstance();
+        Date now = new Date();
+        cal.setTime(now);
+        cal.add(Calendar.MINUTE, 0);
+        long endTime = cal.getTimeInMillis();
+        cal.add(Calendar.MINUTE, -50);
+        long startTime = cal.getTimeInMillis();
+
+        // Create a data source
+        DataSource dataSource = new DataSource.Builder()
+                .setAppPackageName(this)
+                .setDataType(DataType.TYPE_STEP_COUNT_DELTA)
+                .setStreamName(TAG + " - step count")
                 .setType(DataSource.TYPE_RAW)
                 .build();
 
@@ -223,7 +321,7 @@ public class MainActivity extends AppCompatActivity {
                 .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS);
         dataPoint.getValue(Field.FIELD_STEPS).setInt(stepCountDelta);
         dataSet.add(dataPoint);
-        // [END build_insert_data_request]
+        // [END build_update_data_request]
 
         return dataSet;
     }
@@ -252,9 +350,9 @@ public class MainActivity extends AppCompatActivity {
                 // datapoints each consisting of a few steps and a timestamp.  The more likely
                 // scenario is wanting to see how many steps were walked per day, for 7 days.
                 .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
-                // Analogous to a "Group By" in SQL, defines how data should be aggregated.
-                // bucketByTime allows for a time span, whereas bucketBySession would allow
-                // bucketing by "sessions", which would need to be defined in code.
+                        // Analogous to a "Group By" in SQL, defines how data should be aggregated.
+                        // bucketByTime allows for a time span, whereas bucketBySession would allow
+                        // bucketing by "sessions", which would need to be defined in code.
                 .bucketByTime(1, TimeUnit.DAYS)
                 .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
                 .build();
@@ -348,7 +446,7 @@ public class MainActivity extends AppCompatActivity {
                             Log.i(TAG, "Failed to delete today's step count data");
                         }
                     }
-        });
+                });
         // [END delete_dataset]
     }
 
@@ -364,6 +462,9 @@ public class MainActivity extends AppCompatActivity {
         int id = item.getItemId();
         if (id == R.id.action_delete_data) {
             deleteData();
+            return true;
+        } else if (id == R.id.action_update_data) {
+            updateData();
             return true;
         }
         return super.onOptionsItemSelected(item);
