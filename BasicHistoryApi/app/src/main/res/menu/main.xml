@@ -22,6 +22,11 @@
         android:orderInCategory="100"
         app:showAsAction="never" />
 
+    <item android:id="@+id/action_update_data"
+        android:title="@string/action_update_session"
+        android:orderInCategory="100"
+        app:showAsAction="never" />
+
     <item android:id="@+id/action_delete_data"
         android:title="@string/action_delete_session"
         android:orderInCategory="100"
