@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Google, Inc.
+ * Copyright (C) 2016 Google, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.google.android.gms.fit.samples.basichistoryapi;
 
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -43,6 +44,7 @@ import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.request.DataDeleteRequest;
 import com.google.android.gms.fitness.request.DataReadRequest;
+import com.google.android.gms.fitness.request.DataUpdateRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
 
 import java.text.DateFormat;
@@ -70,9 +72,9 @@ public class MainActivity extends AppCompatActivity {
      *  consent dialog. This avoids common duplications as might happen on screen rotations, etc.
      */
     private static final String AUTH_PENDING = "auth_state_pending";
-    private boolean authInProgress = false;
+    private static boolean authInProgress = false;
 
-    private GoogleApiClient mClient = null;
+    public static GoogleApiClient mClient = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -150,7 +152,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private class InsertAndVerifyDataTask extends AsyncTask<Void, Void, Void> {
         protected Void doInBackground(Void... params) {
-            //First, create a new dataset and insertion request.
+            // Create a new dataset and insertion request.
             DataSet dataSet = insertFitnessData();
 
             // [START insert_dataset]
@@ -158,7 +160,7 @@ public class MainActivity extends AppCompatActivity {
             // possible here because of the {@link AsyncTask}. Always include a timeout when calling
             // await() to prevent hanging that can occur from the service being shutdown because
             // of low memory or other conditions.
-            Log.i(TAG, "Inserting the dataset in the History API");
+            Log.i(TAG, "Inserting the dataset in the History API.");
             com.google.android.gms.common.api.Status insertStatus =
                     Fitness.HistoryApi.insertData(mClient, dataSet)
                             .await(1, TimeUnit.MINUTES);
@@ -192,10 +194,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Create and return a {@link DataSet} of step count data for the History API.
+     * Create and return a {@link DataSet} of step count data for insertion using the History API.
      */
     private DataSet insertFitnessData() {
-        Log.i(TAG, "Creating a new data insert request");
+        Log.i(TAG, "Creating a new data insert request.");
 
         // [START build_insert_data_request]
         // Set a start and end time for our data, using a start time of 1 hour before this moment.
@@ -210,12 +212,12 @@ public class MainActivity extends AppCompatActivity {
         DataSource dataSource = new DataSource.Builder()
                 .setAppPackageName(this)
                 .setDataType(DataType.TYPE_STEP_COUNT_DELTA)
-                .setName(TAG + " - step count")
+                .setStreamName(TAG + " - step count")
                 .setType(DataSource.TYPE_RAW)
                 .build();
 
         // Create a data set
-        int stepCountDelta = 1000;
+        int stepCountDelta = 950;
         DataSet dataSet = DataSet.create(dataSource);
         // For each data point, specify a start time, end time, and the data value -- in this case,
         // the number of new steps.
@@ -231,7 +233,7 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Return a {@link DataReadRequest} for all step count changes in the past week.
      */
-    private DataReadRequest queryFitnessData() {
+    public static DataReadRequest queryFitnessData() {
         // [START build_read_data_request]
         // Setting a start and end date using a range of 1 week before this moment.
         Calendar cal = Calendar.getInstance();
@@ -252,9 +254,9 @@ public class MainActivity extends AppCompatActivity {
                 // datapoints each consisting of a few steps and a timestamp.  The more likely
                 // scenario is wanting to see how many steps were walked per day, for 7 days.
                 .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
-                // Analogous to a "Group By" in SQL, defines how data should be aggregated.
-                // bucketByTime allows for a time span, whereas bucketBySession would allow
-                // bucketing by "sessions", which would need to be defined in code.
+                        // Analogous to a "Group By" in SQL, defines how data should be aggregated.
+                        // bucketByTime allows for a time span, whereas bucketBySession would allow
+                        // bucketing by "sessions", which would need to be defined in code.
                 .bucketByTime(1, TimeUnit.DAYS)
                 .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
                 .build();
@@ -271,7 +273,7 @@ public class MainActivity extends AppCompatActivity {
      * consideration. A better option would be to dump the data you receive to a local data
      * directory to avoid exposing it to other applications.
      */
-    private void printData(DataReadResult dataReadResult) {
+    public static void printData(DataReadResult dataReadResult) {
         // [START parse_read_data_result]
         // If the DataReadRequest object specified aggregated data, dataReadResult will be returned
         // as buckets containing DataSets, instead of just DataSets.
@@ -295,7 +297,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // [START parse_dataset]
-    private void dumpDataSet(DataSet dataSet) {
+    private static void dumpDataSet(DataSet dataSet) {
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
         DateFormat dateFormat = getTimeInstance();
 
@@ -317,7 +319,7 @@ public class MainActivity extends AppCompatActivity {
      * step count data for the past 24 hours.
      */
     private void deleteData() {
-        Log.i(TAG, "Deleting today's step count data");
+        Log.i(TAG, "Deleting today's step count data.");
 
         // [START delete_dataset]
         // Set a start and end time for our data, using a start time of 1 day before this moment.
@@ -341,14 +343,14 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onResult(Status status) {
                         if (status.isSuccess()) {
-                            Log.i(TAG, "Successfully deleted today's step count data");
+                            Log.i(TAG, "Successfully deleted today's step count data.");
                         } else {
                             // The deletion will fail if the requesting app tries to delete data
                             // that it did not insert.
-                            Log.i(TAG, "Failed to delete today's step count data");
+                            Log.i(TAG, "Failed to delete today's step count data.");
                         }
                     }
-        });
+                });
         // [END delete_dataset]
     }
 
@@ -365,6 +367,9 @@ public class MainActivity extends AppCompatActivity {
         if (id == R.id.action_delete_data) {
             deleteData();
             return true;
+        } else if (id == R.id.action_update_data){
+            Intent intent = new Intent(MainActivity.this, MainActivity2.class);
+            MainActivity.this.startActivity(intent);
         }
         return super.onOptionsItemSelected(item);
     }
@@ -389,6 +394,6 @@ public class MainActivity extends AppCompatActivity {
 
         logView.setBackgroundColor(Color.WHITE);
         msgFilter.setNext(logView);
-        Log.i(TAG, "Ready");
+        Log.i(TAG, "Ready.");
     }
 }
