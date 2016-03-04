@@ -1,0 +1,29 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 23
+    buildToolsVersion "23.0.1"
+
+    defaultConfig {
+        applicationId "com.google.android.gms.fit.samples.stepcounter"
+        minSdkVersion 9
+        targetSdkVersion 23
+        versionCode 2
+        versionName "1.1"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    // Note, specific version numbers are managed in gradle.properties. This is preferred since it
+    // easily keeps sub-projects on the same versions.
+    compile "com.google.android.gms:play-services-fitness:${google_play_services_library}"
+    compile "com.android.support:appcompat-v7:${google_support_library}"
+    compile "com.android.support:design:${google_support_library}"
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+}
