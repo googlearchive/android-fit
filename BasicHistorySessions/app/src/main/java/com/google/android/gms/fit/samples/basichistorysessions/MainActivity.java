@@ -16,11 +16,11 @@
 package com.google.android.gms.fit.samples.basichistorysessions;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
@@ -31,14 +31,19 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.Scopes;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Scope;
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.fit.samples.common.logger.Log;
 import com.google.android.gms.fit.samples.common.logger.LogView;
 import com.google.android.gms.fit.samples.common.logger.LogWrapper;
 import com.google.android.gms.fit.samples.common.logger.MessageOnlyLogFilter;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessActivities;
-import com.google.android.gms.fitness.FitnessOptions;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
 import com.google.android.gms.fitness.data.DataSource;
@@ -48,11 +53,7 @@ import com.google.android.gms.fitness.data.Session;
 import com.google.android.gms.fitness.request.DataDeleteRequest;
 import com.google.android.gms.fitness.request.SessionInsertRequest;
 import com.google.android.gms.fitness.request.SessionReadRequest;
-import com.google.android.gms.fitness.result.SessionReadResponse;
-import com.google.android.gms.tasks.Continuation;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.tasks.Task;
+import com.google.android.gms.fitness.result.SessionReadResult;
 
 import java.text.DateFormat;
 import java.util.Calendar;
@@ -73,8 +74,7 @@ public class MainActivity extends AppCompatActivity {
     public static final String TAG = "BasicSessions";
     public static final String SAMPLE_SESSION_NAME = "Afternoon run";
     private static final String DATE_FORMAT = "yyyy.MM.dd HH:mm:ss";
-
-    private static final int REQUEST_OAUTH_REQUEST_CODE = 1;
+    private GoogleApiClient mClient = null;
     private static final int REQUEST_PERMISSIONS_REQUEST_CODE = 34;
 
     @Override
@@ -88,152 +88,143 @@ public class MainActivity extends AppCompatActivity {
 
         // When permissions are revoked the app is restarted so onCreate is sufficient to check for
         // permissions core to the Activity's functionality.
-        if (hasRuntimePermissions()) {
-            insertAndVerifySessionWrapper();
-        } else {
-            requestRuntimePermissions();
+        if (!checkPermissions()) {
+            requestPermissions();
         }
-    }
-
-    /**
-     * A wrapper for {@link #insertAndVerifySession}. If the user account has OAuth permission,
-     * continue to {@link #insertAndVerifySession}, else request OAuth permission for the account.
-     */
-    private void insertAndVerifySessionWrapper() {
-        if (hasOAuthPermission()) {
-            insertAndVerifySession();
-        } else {
-            requestOAuthPermission();
-        }
-    }
-
-    /**
-     * Checks if user's account has OAuth permission to Fitness API.
-     */
-    private boolean hasOAuthPermission() {
-        FitnessOptions fitnessOptions = getFitnessSignInOptions();
-        return GoogleSignIn.hasPermissions(GoogleSignIn.getLastSignedInAccount(this), fitnessOptions);
-    }
-
-    /** Launches the Google SignIn activity to request OAuth permission for the user. */
-    private void requestOAuthPermission() {
-        FitnessOptions fitnessOptions = getFitnessSignInOptions();
-        GoogleSignIn.requestPermissions(
-                this,
-                REQUEST_OAUTH_REQUEST_CODE,
-                GoogleSignIn.getLastSignedInAccount(this),
-                fitnessOptions);
-    }
-
-    /** Gets {@link FitnessOptions} in order to check or request OAuth permission for the user. */
-    private FitnessOptions getFitnessSignInOptions() {
-        return FitnessOptions.builder()
-                .addDataType(DataType.TYPE_ACTIVITY_SEGMENT, FitnessOptions.ACCESS_WRITE)
-                .addDataType(DataType.TYPE_SPEED, FitnessOptions.ACCESS_WRITE)
-                .build();
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (resultCode == Activity.RESULT_OK) {
-            if (requestCode == REQUEST_OAUTH_REQUEST_CODE) {
-                insertAndVerifySession();
-            }
+    protected void onResume() {
+        super.onResume();
+
+        // This ensures that if the user denies the permissions then uses Settings to re-enable
+        // them, the app will start working.
+        buildFitnessClient();
+    }
+
+    /**
+     *  Build a {@link GoogleApiClient} that will authenticate the user and allow the application
+     *  to connect to Fitness APIs. The scopes included should match the scopes your app needs
+     *  (see documentation for details). Authentication will occasionally fail intentionally,
+     *  and in those cases, there will be a known resolution, which the OnConnectionFailedListener()
+     *  can address. Examples of this include the user never having signed in before, or having
+     *  multiple accounts on the device and needing to specify which account to use, etc.
+     */
+    private void buildFitnessClient() {
+        // Create the Google API Client
+        if (mClient == null && checkPermissions()) {
+            mClient = new GoogleApiClient.Builder(this)
+                    .addApi(Fitness.HISTORY_API)
+                    .addApi(Fitness.SESSIONS_API)
+                    .addScope(new Scope(Scopes.FITNESS_LOCATION_READ_WRITE))
+                    .addScope(new Scope(Scopes.FITNESS_ACTIVITY_READ_WRITE))
+                    .addConnectionCallbacks(
+                            new GoogleApiClient.ConnectionCallbacks() {
+                                @Override
+                                public void onConnected(Bundle bundle) {
+                                    Log.i(TAG, "Connected!!!");
+                                    // Now you can make calls to the Fitness APIs.  What to do?
+                                    // Play with some sessions!!
+                                    new InsertAndVerifySessionTask().execute();
+                                }
+
+                                @Override
+                                public void onConnectionSuspended(int i) {
+                                    // If your connection to the sensor gets lost at some point,
+                                    // you'll be able to determine the reason and react to it here.
+                                    if (i == ConnectionCallbacks.CAUSE_NETWORK_LOST) {
+                                        Log.i(TAG, "Connection lost.  Cause: Network Lost.");
+                                    } else if (i
+                                            == ConnectionCallbacks.CAUSE_SERVICE_DISCONNECTED) {
+                                        Log.i(TAG,
+                                                "Connection lost.  Reason: Service Disconnected");
+                                    }
+                                }
+                            }
+                    )
+                    .enableAutoManage(this, 0, new GoogleApiClient.OnConnectionFailedListener() {
+                        @Override
+                        public void onConnectionFailed(ConnectionResult result) {
+                            Log.i(TAG, "Google Play services connection failed. Cause: " +
+                                    result.toString());
+                            Snackbar.make(
+                                    MainActivity.this.findViewById(R.id.main_activity_view),
+                                    "Exception while connecting to Google Play services: " +
+                                            result.getErrorMessage(),
+                                    Snackbar.LENGTH_INDEFINITE).show();
+                        }
+                    })
+                    .build();
         }
     }
 
     /**
-     *  Creates and executes a {@link SessionInsertRequest} using {@link
-     *  com.google.android.gms.fitness.SessionsClient} to insert a session.
+     *  Create and execute a {@link SessionInsertRequest} to insert a session into the History API,
+     *  and then create and execute a {@link SessionReadRequest} to verify the insertion succeeded.
+     *  By using an AsyncTask to make our calls, we can schedule synchronous calls, so that we can
+     *  query for sessions after confirming that our insert was successful. Using asynchronous calls
+     *  and callbacks would not guarantee that the insertion had concluded before the read request
+     *  was made. An example of an asynchronous call using a callback can be found in the example
+     *  on deleting sessions below.
      */
-    private Task<Void> insertSession() {
-        //First, create a new session and an insertion request.
-        SessionInsertRequest insertRequest = insertFitnessSession();
+    private class InsertAndVerifySessionTask extends AsyncTask<Void, Void, Void> {
+        protected Void doInBackground(Void... params) {
+            //First, create a new session and an insertion request.
+            SessionInsertRequest insertRequest = insertFitnessSession();
 
-        // [START insert_session]
-        // Then, invoke the Sessions API to insert the session and await the result,
-        // which is possible here because of the AsyncTask. Always include a timeout when
-        // calling await() to avoid hanging that can occur from the service being shutdown
-        // because of low memory or other conditions.
-        Log.i(TAG, "Inserting the session in the History API");
-        return Fitness.getSessionsClient(this, GoogleSignIn.getLastSignedInAccount(this))
-                .insertSession(insertRequest)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        // At this point, the session has been inserted and can be read.
-                        Log.i(TAG, "Session insert was successful!");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.i(TAG, "There was a problem inserting the session: " +
-                                e.getLocalizedMessage());
-                    }
-                });
-        // [END insert_session]
-    }
+            // [START insert_session]
+            // Then, invoke the Sessions API to insert the session and await the result,
+            // which is possible here because of the AsyncTask. Always include a timeout when
+            // calling await() to avoid hanging that can occur from the service being shutdown
+            // because of low memory or other conditions.
+            Log.i(TAG, "Inserting the session in the History API");
+            com.google.android.gms.common.api.Status insertStatus =
+                    Fitness.SessionsApi.insertSession(mClient, insertRequest)
+                            .await(1, TimeUnit.MINUTES);
 
-    /**
-     *  Creates and executes a {@link SessionReadRequest} using {@link
-     *  com.google.android.gms.fitness.SessionsClient} to verify the insertion succeeded .
-     */
-    private Task<SessionReadResponse> verifySession() {
-        // Begin by creating the query.
-        SessionReadRequest readRequest = readFitnessSession();
-
-        // [START read_session]
-        // Invoke the Sessions API to fetch the session with the query and wait for the result
-        // of the read request. Note: Fitness.SessionsApi.readSession() requires the
-        // ACCESS_FINE_LOCATION permission.
-        return Fitness.getSessionsClient(this, GoogleSignIn.getLastSignedInAccount(this))
-                .readSession(readRequest)
-                .addOnSuccessListener(new OnSuccessListener<SessionReadResponse>() {
-                    @Override
-                    public void onSuccess(SessionReadResponse sessionReadResponse) {
-                        // Get a list of the sessions that match the criteria to check the result.
-                        List<Session> sessions = sessionReadResponse.getSessions();
-                        Log.i(TAG, "Session read was successful. Number of returned sessions is: "
-                                + sessions.size());
-
-                        for (Session session : sessions) {
-                            // Process the session
-                            dumpSession(session);
-
-                            // Process the data sets for this session
-                            List<DataSet> dataSets = sessionReadResponse.getDataSet(session);
-                            for (DataSet dataSet : dataSets) {
-                                dumpDataSet(dataSet);
-                            }
-                        }
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.i(TAG, "Failed to read session");
-                    }
-                });
-        // [END read_session]
-    }
-
-    /**
-     *  Inserts and verifies a session by chaining {@link Task} form {@link #insertSession} and
-     *  {@link #verifySession}.
-     */
-    private void insertAndVerifySession() {
-
-        insertSession().continueWithTask(new Continuation<Void, Task<SessionReadResponse>>() {
-            @Override
-            public Task<SessionReadResponse> then(@NonNull Task<Void> task) throws Exception {
-                return verifySession();
+            // Before querying the session, check to see if the insertion succeeded.
+            if (!insertStatus.isSuccess()) {
+                Log.i(TAG, "There was a problem inserting the session: " +
+                        insertStatus.getStatusMessage());
+                return null;
             }
-        });
+
+            // At this point, the session has been inserted and can be read.
+            Log.i(TAG, "Session insert was successful!");
+            // [END insert_session]
+
+            // Begin by creating the query.
+            SessionReadRequest readRequest = readFitnessSession();
+
+            // [START read_session]
+            // Invoke the Sessions API to fetch the session with the query and wait for the result
+            // of the read request. Note: Fitness.SessionsApi.readSession() requires the
+            // ACCESS_FINE_LOCATION permission.
+            SessionReadResult sessionReadResult =
+                    Fitness.SessionsApi.readSession(mClient, readRequest)
+                            .await(1, TimeUnit.MINUTES);
+
+            // Get a list of the sessions that match the criteria to check the result.
+            Log.i(TAG, "Session read was successful. Number of returned sessions is: "
+                    + sessionReadResult.getSessions().size());
+            for (Session session : sessionReadResult.getSessions()) {
+                // Process the session
+                dumpSession(session);
+
+                // Process the data sets for this session
+                List<DataSet> dataSets = sessionReadResult.getDataSet(session);
+                for (DataSet dataSet : dataSets) {
+                    dumpDataSet(dataSet);
+                }
+            }
+            // [END read_session]
+
+            return null;
+        }
     }
 
     /**
-     *  Creates a {@link SessionInsertRequest} for a run that consists of 10 minutes running,
+     *  Create a {@link SessionInsertRequest} for a run that consists of 10 minutes running,
      *  10 minutes walking, and 10 minutes of running. The request contains two {@link DataSet}s:
      *  speed data and activity segments data.
      *
@@ -343,7 +334,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Returns a {@link SessionReadRequest} for all speed data in the past week.
+     * Return a {@link SessionReadRequest} for all speed data in the past week.
      */
     private SessionReadRequest readFitnessSession() {
         Log.i(TAG, "Reading History API results for session: " + SAMPLE_SESSION_NAME);
@@ -391,7 +382,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Deletes the {@link DataSet} we inserted with our {@link Session} from the History API.
+     * Delete the {@link DataSet} we inserted with our {@link Session} from the History API.
      * In this example, we delete all step count data for the past 24 hours. Note that this
      * deletion uses the History API, and not the Sessions API, since sessions are truly just time
      * intervals over a set of data, and the data is what we are interested in removing.
@@ -414,21 +405,19 @@ public class MainActivity extends AppCompatActivity {
             .deleteAllSessions() // Or specify a particular session here
             .build();
 
-        // Delete request using HistoryClient and specify listeners that will check the result.
-        Fitness.getHistoryClient(this, GoogleSignIn.getLastSignedInAccount(this))
-                .deleteData(request)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
+        // Invoke the History API with the Google API client object and the delete request and
+        // specify a callback that will check the result.
+        Fitness.HistoryApi.deleteData(mClient, request)
+                .setResultCallback(new ResultCallback<Status>() {
                     @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.i(TAG, "Successfully deleted today's sessions");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        // The deletion will fail if the requesting app tries to delete data
-                        // that it did not insert.
-                        Log.i(TAG, "Failed to delete today's sessions");
+                    public void onResult(Status status) {
+                        if (status.isSuccess()) {
+                            Log.i(TAG, "Successfully deleted today's sessions");
+                        } else {
+                            // The deletion will fail if the requesting app tries to delete data
+                            // that it did not insert.
+                            Log.i(TAG, "Failed to delete today's sessions");
+                        }
                     }
                 });
     }
@@ -451,7 +440,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     *  Initializes a custom log class that outputs both to in-app targets and logcat.
+     *  Initialize a custom log class that outputs both to in-app targets and logcat.
      */
     private void initializeLogging() {
         // Wraps Android's native log framework.
@@ -473,14 +462,16 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "Ready");
     }
 
-    /** Returns the current state of the permissions needed. */
-    private boolean hasRuntimePermissions() {
-        int permissionState =
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION);
+    /**
+     * Return the current state of the permissions needed.
+     */
+    private boolean checkPermissions() {
+        int permissionState = ActivityCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_FINE_LOCATION);
         return permissionState == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void requestRuntimePermissions() {
+    private void requestPermissions() {
         boolean shouldProvideRationale =
                 ActivityCompat.shouldShowRequestPermissionRationale(this,
                         Manifest.permission.ACCESS_FINE_LOCATION);
@@ -528,8 +519,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.i(TAG, "User interaction was cancelled.");
             } else if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission was granted.
-                insertAndVerifySessionWrapper();
-
+                buildFitnessClient();
             } else {
                 // Permission denied.
 
