@@ -155,7 +155,7 @@ public class MainActivity extends AppCompatActivity {
         // which is possible here because of the AsyncTask. Always include a timeout when
         // calling await() to avoid hanging that can occur from the service being shutdown
         // because of low memory or other conditions.
-        Log.i(TAG, "Inserting the session in the History API");
+        Log.i(TAG, "Inserting the session in the Sessions API");
         return Fitness.getSessionsClient(this, GoogleSignIn.getLastSignedInAccount(this))
                 .insertSession(insertRequest)
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
