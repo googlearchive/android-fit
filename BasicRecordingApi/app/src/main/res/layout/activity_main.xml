@@ -28,15 +28,54 @@ limitations under the License.
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/intro_text" />
+
     <ScrollView
-        android:layout_width="fill_parent"
-        android:layout_height="fill_parent"
-        android:layout_below="@id/title_text_view">
+        android:layout_width="363dp"
+        android:layout_height="329dp"
+        android:layout_below="@id/title_text_view"
+        android:layout_marginTop="115dp">
+
         <com.google.android.gms.fit.samples.common.logger.LogView
             android:id="@+id/sample_logview"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:scrollbars="vertical" />
     </ScrollView>
+
+    <Button
+        android:id="@+id/insert_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/title_text_view"
+        android:layout_centerHorizontal="true"
+        android:text="Insert Data" />
+
+    <Button
+        android:id="@+id/read_data"
+        android:layout_width="159dp"
+        android:layout_height="53dp"
+        android:layout_below="@+id/insert_data"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentRight="true"
+        android:layout_marginStart="122dp"
+        android:layout_marginLeft="122dp"
+        android:layout_marginTop="9dp"
+        android:layout_marginEnd="119dp"
+        android:layout_marginRight="119dp"
+        android:text="READ DATA" />
+
+    <TextView
+        android:id="@+id/Weight"
+        android:layout_width="110dp"
+        android:layout_height="66dp"
+        android:layout_alignBottom="@+id/insert_data"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentRight="true"
+        android:layout_marginEnd="11dp"
+        android:layout_marginRight="11dp"
+        android:layout_marginBottom="-35dp"
+        android:text="TextView" />
 </RelativeLayout>
 
